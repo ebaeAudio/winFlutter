@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:win_flutter/app/app.dart';
+import 'package:win_flutter/app/env.dart';
 import 'package:win_flutter/app/theme.dart';
 
 void main() {
@@ -19,7 +20,13 @@ void main() {
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          // In tests, default env has no Supabase config; demo mode avoids redirects to setup/auth.
+          envProvider.overrideWithValue(
+            Env(supabaseUrl: '', supabaseAnonKey: '', demoMode: true),
+          ),
+        ],
         child: const AppRoot(),
       ),
     );

@@ -10,6 +10,8 @@ import '../features/focus/ui/focus_policies_screen.dart';
 import '../features/focus/ui/focus_policy_editor_screen.dart';
 import '../features/rollups/rollups_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/settings/trackers/tracker_editor_screen.dart';
+import '../features/settings/trackers/trackers_screen.dart';
 import '../features/setup/setup_screen.dart';
 import '../features/today/today_screen.dart';
 import '../features/tasks/task_details_screen.dart';
@@ -108,6 +110,25 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'settings',
             builder: (context, state) => const SettingsScreen(),
+            routes: [
+              GoRoute(
+                path: 'trackers',
+                builder: (context, state) => const TrackersScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'new',
+                    builder: (context, state) =>
+                        const TrackerEditorScreen(trackerId: null),
+                  ),
+                  GoRoute(
+                    path: 'edit/:id',
+                    builder: (context, state) => TrackerEditorScreen(
+                      trackerId: state.pathParameters['id'],
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),

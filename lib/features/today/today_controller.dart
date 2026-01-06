@@ -110,6 +110,7 @@ class TodayController extends StateNotifier<TodayDayData> {
     try {
       final tasks = await repo.listForDate(ymd: _ymd);
       state = state.copyWith(tasks: [for (final t in tasks) _toTodayTask(t)]);
+      unawaited(_autoSelectFocusTaskIfNeeded());
     } catch (_) {
       // Keep existing state (empty tasks). UI surfaces this later with empty-state affordances.
     }
@@ -118,7 +119,8 @@ class TodayController extends StateNotifier<TodayDayData> {
   Future<void> _loadHabitsForDay() async {
     try {
       final habits = await _habitsRepository.listHabits();
-      final completedIds = await _habitsRepository.getCompletedHabitIds(ymd: _ymd);
+      final completedIds =
+          await _habitsRepository.getCompletedHabitIds(ymd: _ymd);
       final todayHabits = [
         for (final h in habits)
           TodayHabit(
@@ -142,6 +144,9 @@ class TodayController extends StateNotifier<TodayDayData> {
     } else {
       await _saveLocalDay(next);
     }
+    if (enabled) {
+      unawaited(_autoSelectFocusTaskIfNeeded());
+    }
   }
 
   Future<void> setFocusTaskId(String? taskId) async {
@@ -151,6 +156,33 @@ class TodayController extends StateNotifier<TodayDayData> {
       await _saveFocusTaskId(taskId);
     } else {
       await _saveLocalDay(next);
+    }
+  }
+
+  /// Enable Today focus mode and ensure a stable default focus task is selected.
+  ///
+  /// ADHD-friendly default:
+  /// - Preserve an existing `focusTaskId`.
+  /// - Otherwise, pick the first incomplete Must‑Win (if any) and persist it.
+  Future<void> enableFocusModeAndSelectDefaultTask() async {
+    if (!state.focusModeEnabled) {
+      await setFocusModeEnabled(true);
+    } else {
+      // Even if already enabled, we may still want to select a default task if
+      // none has been chosen yet (e.g., tasks loaded after enabling).
+      await _autoSelectFocusTaskIfNeeded();
+    }
+  }
+
+  Future<void> _autoSelectFocusTaskIfNeeded() async {
+    if (!state.focusModeEnabled) return;
+    if ((state.focusTaskId ?? '').trim().isNotEmpty) return;
+
+    for (final t in state.tasks) {
+      if (t.type == TodayTaskType.mustWin && !t.completed) {
+        await setFocusTaskId(t.id);
+        return;
+      }
     }
   }
 
@@ -258,7 +290,8 @@ class TodayController extends StateNotifier<TodayDayData> {
   }) async {
     if (_isSupabaseMode) {
       // Details are stored separately in Supabase mode (see TaskDetailsRepository).
-      throw UnsupportedError('Task details updates are not supported here in Supabase mode.');
+      throw UnsupportedError(
+          'Task details updates are not supported here in Supabase mode.');
     }
 
     final nextTasks = [
@@ -281,7 +314,8 @@ class TodayController extends StateNotifier<TodayDayData> {
     required String title,
   }) async {
     if (_isSupabaseMode) {
-      throw UnsupportedError('Subtasks are not supported here in Supabase mode.');
+      throw UnsupportedError(
+          'Subtasks are not supported here in Supabase mode.');
     }
     final trimmed = title.trim();
     if (trimmed.isEmpty) return;
@@ -297,7 +331,10 @@ class TodayController extends StateNotifier<TodayDayData> {
 
     final nextTasks = [
       for (final t in state.tasks)
-        if (t.id == taskId) t.copyWith(subtasks: [...t.subtasks, subtask]) else t,
+        if (t.id == taskId)
+          t.copyWith(subtasks: [...t.subtasks, subtask])
+        else
+          t,
     ];
     await _saveLocalDay(state.copyWith(tasks: nextTasks));
   }
@@ -308,7 +345,8 @@ class TodayController extends StateNotifier<TodayDayData> {
     required bool completed,
   }) async {
     if (_isSupabaseMode) {
-      throw UnsupportedError('Subtasks are not supported here in Supabase mode.');
+      throw UnsupportedError(
+          'Subtasks are not supported here in Supabase mode.');
     }
 
     final nextTasks = [
@@ -331,13 +369,15 @@ class TodayController extends StateNotifier<TodayDayData> {
     required String subtaskId,
   }) async {
     if (_isSupabaseMode) {
-      throw UnsupportedError('Subtasks are not supported here in Supabase mode.');
+      throw UnsupportedError(
+          'Subtasks are not supported here in Supabase mode.');
     }
 
     final nextTasks = [
       for (final t in state.tasks)
         if (t.id == taskId)
-          t.copyWith(subtasks: t.subtasks.where((s) => s.id != subtaskId).toList())
+          t.copyWith(
+              subtasks: t.subtasks.where((s) => s.id != subtaskId).toList())
         else
           t,
     ];

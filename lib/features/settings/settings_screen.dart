@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/auth.dart';
 import '../../app/env.dart';
@@ -30,6 +31,24 @@ class SettingsScreen extends ConsumerWidget {
                   title: const Text('Email'),
                   subtitle: Text(auth?.email ??
                       (auth?.isDemo == true ? 'demo@local' : '—')),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Gap.h16,
+        const SectionHeader(title: 'Trackers'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.s8),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.emoji_objects_outlined),
+                  title: const Text('Custom trackers'),
+                  subtitle: const Text('Add quick tallies to Today'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.go('/home/settings/trackers'),
                 ),
               ],
             ),

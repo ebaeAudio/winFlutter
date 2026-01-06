@@ -8,6 +8,7 @@ import '../../../domain/focus/focus_session.dart';
 import '../../../domain/focus/focus_policy.dart';
 import '../../../domain/focus/focus_friction.dart';
 import '../../../ui/app_scaffold.dart';
+import '../../today/today_controller.dart';
 import '../focus_policy_controller.dart';
 import '../focus_session_controller.dart';
 import '../focus_ticker_provider.dart';
@@ -85,7 +86,8 @@ class _ActiveSessionCard extends ConsumerWidget {
     final remaining = session!.plannedEndAt.difference(now);
     final mmss = _formatRemaining(remaining);
 
-    final policies = ref.watch(focusPolicyListProvider).valueOrNull ?? const <FocusPolicy>[];
+    final policies =
+        ref.watch(focusPolicyListProvider).valueOrNull ?? const <FocusPolicy>[];
     FocusPolicy? policy;
     for (final p in policies) {
       if (p.id == session!.policyId) {
@@ -111,7 +113,8 @@ class _ActiveSessionCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Session active', style: Theme.of(context).textTheme.titleMedium),
+            Text('Session active',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 6),
             Text('Ends at: ${DateFormat.Hm().format(session!.plannedEndAt)}'),
             Text('Remaining: $mmss'),
@@ -122,7 +125,8 @@ class _ActiveSessionCard extends ConsumerWidget {
               icon: Icons.stop_circle,
               onConfirmed: () async {
                 // Capture the controller before any await; `ref` can't be used after dispose.
-                final activeController = ref.read(activeFocusSessionProvider.notifier);
+                final activeController =
+                    ref.read(activeFocusSessionProvider.notifier);
                 // Apply the configured "unlock delay" as a baseline.
                 // (Android also enforces this delay on the native blocking screen.)
                 if (friction.unlockDelaySeconds > 0) {
@@ -192,7 +196,8 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Start a session', style: Theme.of(context).textTheme.titleMedium),
+            Text('Start a session',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             if (policies.isEmpty)
               const Text('Create a policy to get started.')
@@ -235,13 +240,25 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                       if (!ok) return;
                       if (!context.mounted) return;
 
-                      await ref.read(activeFocusSessionProvider.notifier).startSession(
+                      await ref
+                          .read(activeFocusSessionProvider.notifier)
+                          .startSession(
                             policyId: policy.id,
                             duration: Duration(minutes: _minutes.toInt()),
                           );
+
+                      if (!context.mounted) return;
+                      final ymd =
+                          DateFormat('yyyy-MM-dd').format(DateTime.now());
+                      await ref
+                          .read(todayControllerProvider(ymd).notifier)
+                          .enableFocusModeAndSelectDefaultTask();
+                      if (!context.mounted) return;
+                      context.go('/home/today');
                     },
               icon: const Icon(Icons.play_arrow),
-              label: Text(policies.isEmpty ? 'Create a policy' : 'Start session'),
+              label:
+                  Text(policies.isEmpty ? 'Create a policy' : 'Start session'),
             ),
           ],
         ),
@@ -255,7 +272,8 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
     required Duration duration,
   }) async {
     final isIOS = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
-    final isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    final isAndroid =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
     final endsAt = DateTime.now().add(duration);
     final friction = policy.friction;
     final allowedCount = policy.allowedApps.length;
@@ -275,7 +293,8 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Policy: ${policy.name}'),
-                  Text('Duration: ${duration.inMinutes} min (ends at ${DateFormat.Hm().format(endsAt)})'),
+                  Text(
+                      'Duration: ${duration.inMinutes} min (ends at ${DateFormat.Hm().format(endsAt)})'),
                   const SizedBox(height: 12),
                   Text(
                     'What will happen',
@@ -301,7 +320,8 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                     style: Theme.of(ctx).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 6),
-                  Text('It will end automatically at ${DateFormat.Hm().format(endsAt)}.'),
+                  Text(
+                      'It will end automatically at ${DateFormat.Hm().format(endsAt)}.'),
                   const SizedBox(height: 6),
                   Text(
                     'To end early: open Dumb Phone Mode → “Hold to end session early” (${friction.holdToUnlockSeconds}s hold, then ${friction.unlockDelaySeconds}s delay).',
@@ -331,5 +351,3 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
     return ok;
   }
 }
-
-

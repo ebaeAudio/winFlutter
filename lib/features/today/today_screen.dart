@@ -10,12 +10,14 @@ import '../../app/env.dart';
 import '../../app/supabase.dart';
 import '../../assistant/assistant_client.dart';
 import '../../assistant/assistant_executor.dart';
+import '../../data/trackers/tracker_models.dart';
 import '../../ui/app_scaffold.dart';
 import '../../ui/components/empty_state_card.dart';
 import '../../ui/components/section_header.dart';
 import '../../ui/spacing.dart';
 import 'today_controller.dart';
 import 'today_models.dart';
+import 'today_trackers_controller.dart';
 
 class TodayScreen extends ConsumerStatefulWidget {
   const TodayScreen({super.key});
@@ -210,6 +212,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
     final today = ref.watch(todayControllerProvider(ymd));
     final controller = ref.read(todayControllerProvider(ymd).notifier);
+    final trackersData = ref.watch(todayTrackersControllerProvider(ymd));
+    final trackersController =
+        ref.read(todayTrackersControllerProvider(ymd).notifier);
     final env = ref.watch(envProvider);
     final supabaseState = ref.watch(supabaseProvider);
     final assistantClient = AssistantClient(
@@ -733,6 +738,100 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             ),
           ),
         Gap.h16,
+        const SectionHeader(title: 'Trackers'),
+        if (trackersData.isLoading)
+          const Center(child: CircularProgressIndicator())
+        else if (trackersData.trackers.isEmpty)
+          EmptyStateCard(
+            icon: Icons.emoji_objects_outlined,
+            title: 'Add a tracker',
+            description:
+                'Create a custom tracker (3 items) and tap here to tally quickly.',
+            ctaLabel: 'Add tracker',
+            onCtaPressed: () => context.go('/home/settings/trackers'),
+          )
+        else
+          Column(
+            children: [
+              if ((trackersData.error ?? '').trim().isNotEmpty) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpace.s12),
+                    child: Text('Tracker error: ${trackersData.error}'),
+                  ),
+                ),
+                Gap.h12,
+              ],
+              for (final t in trackersData.trackers) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: AppSpace.s8),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          title: Text(
+                            t.tracker.name,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: const Text('Tap to add. Long-press to undo.'),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                              AppSpace.s12, 0, AppSpace.s12, AppSpace.s12),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isNarrow = constraints.maxWidth < 420;
+                              final tileWidth = isNarrow
+                                  ? constraints.maxWidth
+                                  : ((constraints.maxWidth - AppSpace.s12) / 2);
+                              return Wrap(
+                                spacing: AppSpace.s12,
+                                runSpacing: AppSpace.s12,
+                                children: [
+                                  for (final it in t.items)
+                                    SizedBox(
+                                      width: tileWidth,
+                                      child: _TrackerTallyTile(
+                                        emoji: it.item.emoji,
+                                        title: it.item.description,
+                                        subtitle: it.item.hasTarget
+                                            ? _targetLabel(
+                                                it.item.targetCadence,
+                                              )
+                                            : null,
+                                        count: it.todayCount,
+                                        progress: it.item.hasTarget
+                                            ? '${it.progressCount}/${it.item.targetValue}'
+                                            : null,
+                                        onIncrement: () =>
+                                            trackersController.increment(
+                                          trackerId: t.tracker.id,
+                                          itemKey: it.item.key,
+                                        ),
+                                        onDecrement: () =>
+                                            trackersController.decrement(
+                                          trackerId: t.tracker.id,
+                                          itemKey: it.item.key,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Gap.h12,
+              ],
+            ],
+          ),
+        Gap.h16,
         SectionHeader(
           title: 'Must‑Wins',
           trailing: Text(
@@ -817,6 +916,14 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         ),
       ],
     );
+  }
+
+  static String _targetLabel(TargetCadence? cadence) {
+    return switch (cadence) {
+      TargetCadence.weekly => 'Weekly target',
+      TargetCadence.yearly => 'Yearly target',
+      _ => 'Daily target',
+    };
   }
 
   Future<void> _runAssistant({
@@ -1053,6 +1160,79 @@ class _TasksCard extends StatelessWidget {
                   ),
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TrackerTallyTile extends StatelessWidget {
+  const _TrackerTallyTile({
+    required this.emoji,
+    required this.title,
+    required this.count,
+    required this.onIncrement,
+    required this.onDecrement,
+    this.subtitle,
+    this.progress,
+  });
+
+  final String emoji;
+  final String title;
+  final String? subtitle;
+  final int count;
+  final String? progress;
+  final VoidCallback onIncrement;
+  final VoidCallback onDecrement;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onIncrement,
+      onLongPress: onDecrement,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpace.s12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
+          color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.18),
+        ),
+        child: Row(
+          children: [
+            Text(emoji, style: theme.textTheme.headlineSmall),
+            Gap.w12,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                  if ((subtitle ?? '').trim().isNotEmpty ||
+                      (progress ?? '').trim().isNotEmpty) ...[
+                    Gap.h4,
+                    Text(
+                      [
+                        if ((subtitle ?? '').trim().isNotEmpty) subtitle!,
+                        if ((progress ?? '').trim().isNotEmpty) progress!,
+                      ].join(' • '),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Gap.w12,
+            Text(
+              '$count',
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w900),
+            ),
           ],
         ),
       ),
