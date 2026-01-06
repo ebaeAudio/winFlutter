@@ -12,6 +12,7 @@ import '../features/rollups/rollups_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/setup/setup_screen.dart';
 import '../features/today/today_screen.dart';
+import '../features/tasks/task_details_screen.dart';
 import 'auth.dart';
 
 final _routerRefreshNotifierProvider = Provider<_RouterRefreshNotifier>((ref) {
@@ -66,6 +67,15 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: 'today',
             builder: (context, state) => const TodayScreen(),
+            routes: [
+              GoRoute(
+                path: 'task/:id',
+                builder: (context, state) => TaskDetailsScreen(
+                  taskId: state.pathParameters['id'] ?? '',
+                  ymd: state.uri.queryParameters['ymd'] ?? '',
+                ),
+              ),
+            ],
           ),
           GoRoute(
             path: 'focus',
@@ -79,6 +89,8 @@ final routerProvider = Provider<GoRouter>((ref) {
                     path: 'edit/:id',
                     builder: (context, state) => FocusPolicyEditorScreen(
                       policyId: state.pathParameters['id'] ?? '',
+                      closeOnSave:
+                          (state.uri.queryParameters['closeOnSave'] ?? '') == '1',
                     ),
                   ),
                 ],

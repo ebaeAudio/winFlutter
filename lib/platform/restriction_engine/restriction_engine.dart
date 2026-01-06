@@ -23,6 +23,12 @@ abstract class RestrictionEngine {
   Future<RestrictionPermissions> getPermissions();
   Future<void> requestPermissions();
 
+  /// Optional: configure platform-native app selection for restrictions.
+  ///
+  /// iOS requires a native picker (FamilyControls) to produce the tokens needed to
+  /// apply Screen Time shields. On Android this is a no-op.
+  Future<void> configureApps();
+
   /// Apply restrictions for the duration of the current session.
   ///
   /// The product model is allowlist-based (allowed apps), plus friction settings

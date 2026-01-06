@@ -28,6 +28,11 @@ class TodayTask {
     required this.type,
     required this.completed,
     required this.createdAtMs,
+    this.notes,
+    this.nextStep,
+    this.estimateMinutes,
+    this.actualMinutes,
+    this.subtasks = const [],
   });
 
   final String id;
@@ -35,11 +40,21 @@ class TodayTask {
   final TodayTaskType type;
   final bool completed;
   final int createdAtMs;
+  final String? notes;
+  final String? nextStep;
+  final int? estimateMinutes;
+  final int? actualMinutes;
+  final List<TodaySubtask> subtasks;
 
   TodayTask copyWith({
     String? title,
     TodayTaskType? type,
     bool? completed,
+    String? notes,
+    String? nextStep,
+    int? estimateMinutes,
+    int? actualMinutes,
+    List<TodaySubtask>? subtasks,
   }) {
     return TodayTask(
       id: id,
@@ -47,6 +62,11 @@ class TodayTask {
       type: type ?? this.type,
       completed: completed ?? this.completed,
       createdAtMs: createdAtMs,
+      notes: notes ?? this.notes,
+      nextStep: nextStep ?? this.nextStep,
+      estimateMinutes: estimateMinutes ?? this.estimateMinutes,
+      actualMinutes: actualMinutes ?? this.actualMinutes,
+      subtasks: subtasks ?? this.subtasks,
     );
   }
 
@@ -56,14 +76,78 @@ class TodayTask {
         'type': type.name,
         'completed': completed,
         'createdAtMs': createdAtMs,
+        if (notes != null) 'notes': notes,
+        if (nextStep != null) 'nextStep': nextStep,
+        if (estimateMinutes != null) 'estimateMinutes': estimateMinutes,
+        if (actualMinutes != null) 'actualMinutes': actualMinutes,
+        if (subtasks.isNotEmpty) 'subtasks': [for (final s in subtasks) s.toJson()],
       };
 
   static TodayTask fromJson(Map<String, Object?> json) {
+    final subtasks = <TodaySubtask>[];
+    final rawSubtasks = json['subtasks'];
+    if (rawSubtasks is List) {
+      for (final s in rawSubtasks) {
+        if (s is Map<String, Object?>) {
+          subtasks.add(TodaySubtask.fromJson(s));
+        } else if (s is Map) {
+          subtasks.add(TodaySubtask.fromJson(Map<String, Object?>.from(s)));
+        }
+      }
+    }
+
     return TodayTask(
       id: (json['id'] as String?) ?? '',
       title: (json['title'] as String?) ?? '',
       type: TodayTaskType.fromString(
           (json['type'] as String?) ?? TodayTaskType.mustWin.name),
+      completed: (json['completed'] as bool?) ?? false,
+      createdAtMs: (json['createdAtMs'] as num?)?.toInt() ?? 0,
+      notes: (json['notes'] as String?),
+      nextStep: (json['nextStep'] as String?),
+      estimateMinutes: (json['estimateMinutes'] as num?)?.toInt(),
+      actualMinutes: (json['actualMinutes'] as num?)?.toInt(),
+      subtasks: subtasks,
+    );
+  }
+}
+
+class TodaySubtask {
+  const TodaySubtask({
+    required this.id,
+    required this.title,
+    required this.completed,
+    required this.createdAtMs,
+  });
+
+  final String id;
+  final String title;
+  final bool completed;
+  final int createdAtMs;
+
+  TodaySubtask copyWith({
+    String? title,
+    bool? completed,
+  }) {
+    return TodaySubtask(
+      id: id,
+      title: title ?? this.title,
+      completed: completed ?? this.completed,
+      createdAtMs: createdAtMs,
+    );
+  }
+
+  Map<String, Object?> toJson() => {
+        'id': id,
+        'title': title,
+        'completed': completed,
+        'createdAtMs': createdAtMs,
+      };
+
+  static TodaySubtask fromJson(Map<String, Object?> json) {
+    return TodaySubtask(
+      id: (json['id'] as String?) ?? '',
+      title: (json['title'] as String?) ?? '',
       completed: (json['completed'] as bool?) ?? false,
       createdAtMs: (json['createdAtMs'] as num?)?.toInt() ?? 0,
     );

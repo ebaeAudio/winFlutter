@@ -25,7 +25,7 @@ class FocusOnboardingScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(12),
             child: Text(
               isIOS
-                  ? 'On iOS, we use Screen Time APIs to shield apps during a Focus Session.'
+                  ? 'On iOS, we request Screen Time authorization so we can support app blocking during a Focus Session. (Note: enforcement may be limited or unavailable in this build.)'
                   : 'On Android, we use an Accessibility Service to detect the foreground app and block non‑allowed apps.',
             ),
           ),
@@ -60,6 +60,7 @@ class FocusOnboardingScreen extends ConsumerWidget {
         FilledButton.icon(
           onPressed: () async {
             await engine.requestPermissions();
+            if (!context.mounted) return;
             ref.invalidate(restrictionPermissionsProvider);
           },
           icon: const Icon(Icons.lock_open),
@@ -71,7 +72,7 @@ class FocusOnboardingScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(12),
             child: Text(
               isIOS
-                  ? 'You may be prompted to authorize Screen Time access. If you deny it, Dumb Phone Mode cannot shield apps.'
+                  ? 'You may be prompted to authorize Screen Time access. If you deny it, Dumb Phone Mode cannot use Screen Time-based restrictions.'
                   : 'You’ll be taken to Accessibility settings. Turn on “Win the Year Focus Service”.',
             ),
           ),

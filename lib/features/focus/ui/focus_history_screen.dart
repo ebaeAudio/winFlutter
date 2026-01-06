@@ -18,6 +18,7 @@ class FocusHistoryScreen extends ConsumerWidget {
         IconButton(
           tooltip: 'Clear',
           onPressed: () async {
+            final controller = ref.read(focusSessionHistoryProvider.notifier);
             final ok = await showDialog<bool>(
                   context: context,
                   builder: (ctx) => AlertDialog(
@@ -38,7 +39,7 @@ class FocusHistoryScreen extends ConsumerWidget {
                 ) ??
                 false;
             if (!ok) return;
-            await ref.read(focusSessionHistoryProvider.notifier).clear();
+            await controller.clear();
           },
           icon: const Icon(Icons.delete_sweep),
         ),

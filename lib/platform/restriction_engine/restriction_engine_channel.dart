@@ -9,6 +9,7 @@ import 'restriction_engine.dart';
 /// Channel contract (initial scaffold):
 /// - getPermissions -> {isSupported, isAuthorized, needsOnboarding, platformDetails}
 /// - requestPermissions -> void
+/// - configureApps -> void (iOS: show app picker; Android: no-op)
 /// - startSession -> void (args: endsAtMillis, allowedApps[], friction{})
 /// - endSession -> void
 /// - startEmergencyException -> void (args: durationMillis)
@@ -42,6 +43,15 @@ class MethodChannelRestrictionEngine implements RestrictionEngine {
   Future<void> requestPermissions() async {
     try {
       await _channel.invokeMethod<void>('requestPermissions');
+    } on MissingPluginException {
+      // No-op.
+    }
+  }
+
+  @override
+  Future<void> configureApps() async {
+    try {
+      await _channel.invokeMethod<void>('configureApps');
     } on MissingPluginException {
       // No-op.
     }

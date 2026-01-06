@@ -21,7 +21,9 @@ class FocusPoliciesScreen extends ConsumerWidget {
             final created =
                 await ref.read(focusPolicyListProvider.notifier).createDefault();
             if (!context.mounted) return;
-            context.go('/home/focus/policies/edit/${created.id}');
+            // `closeOnSave=1` makes the editor navigate back to the list after the
+            // first successful save in the "new policy" flow.
+            context.go('/home/focus/policies/edit/${created.id}?closeOnSave=1');
           },
           icon: const Icon(Icons.add),
         ),
@@ -55,6 +57,8 @@ class FocusPoliciesScreen extends ConsumerWidget {
                         tooltip: 'Delete',
                         icon: const Icon(Icons.delete_outline),
                         onPressed: () async {
+                          final controller =
+                              ref.read(focusPolicyListProvider.notifier);
                           final ok = await showDialog<bool>(
                                 context: context,
                                 builder: (ctx) => AlertDialog(
@@ -74,9 +78,7 @@ class FocusPoliciesScreen extends ConsumerWidget {
                               ) ??
                               false;
                           if (!ok) return;
-                          await ref
-                              .read(focusPolicyListProvider.notifier)
-                              .delete(p.id);
+                          await controller.delete(p.id);
                         },
                       ),
                       onTap: () =>

@@ -249,6 +249,101 @@ class TodayController extends StateNotifier<TodayDayData> {
     await _saveLocalDay(state.copyWith(tasks: nextTasks));
   }
 
+  Future<void> updateTaskDetails({
+    required String taskId,
+    String? notes,
+    String? nextStep,
+    int? estimateMinutes,
+    int? actualMinutes,
+  }) async {
+    if (_isSupabaseMode) {
+      // Details are stored separately in Supabase mode (see TaskDetailsRepository).
+      throw UnsupportedError('Task details updates are not supported here in Supabase mode.');
+    }
+
+    final nextTasks = [
+      for (final t in state.tasks)
+        if (t.id == taskId)
+          t.copyWith(
+            notes: notes ?? t.notes,
+            nextStep: nextStep ?? t.nextStep,
+            estimateMinutes: estimateMinutes ?? t.estimateMinutes,
+            actualMinutes: actualMinutes ?? t.actualMinutes,
+          )
+        else
+          t,
+    ];
+    await _saveLocalDay(state.copyWith(tasks: nextTasks));
+  }
+
+  Future<void> addSubtask({
+    required String taskId,
+    required String title,
+  }) async {
+    if (_isSupabaseMode) {
+      throw UnsupportedError('Subtasks are not supported here in Supabase mode.');
+    }
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) return;
+
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final id = '${nowMs}_${DateTime.now().microsecondsSinceEpoch}';
+    final subtask = TodaySubtask(
+      id: id,
+      title: trimmed,
+      completed: false,
+      createdAtMs: nowMs,
+    );
+
+    final nextTasks = [
+      for (final t in state.tasks)
+        if (t.id == taskId) t.copyWith(subtasks: [...t.subtasks, subtask]) else t,
+    ];
+    await _saveLocalDay(state.copyWith(tasks: nextTasks));
+  }
+
+  Future<void> setSubtaskCompleted({
+    required String taskId,
+    required String subtaskId,
+    required bool completed,
+  }) async {
+    if (_isSupabaseMode) {
+      throw UnsupportedError('Subtasks are not supported here in Supabase mode.');
+    }
+
+    final nextTasks = [
+      for (final t in state.tasks)
+        if (t.id == taskId)
+          t.copyWith(
+            subtasks: [
+              for (final s in t.subtasks)
+                if (s.id == subtaskId) s.copyWith(completed: completed) else s,
+            ],
+          )
+        else
+          t,
+    ];
+    await _saveLocalDay(state.copyWith(tasks: nextTasks));
+  }
+
+  Future<void> deleteSubtask({
+    required String taskId,
+    required String subtaskId,
+  }) async {
+    if (_isSupabaseMode) {
+      throw UnsupportedError('Subtasks are not supported here in Supabase mode.');
+    }
+
+    final nextTasks = [
+      for (final t in state.tasks)
+        if (t.id == taskId)
+          t.copyWith(subtasks: t.subtasks.where((s) => s.id != subtaskId).toList())
+        else
+          t,
+    ];
+    await _saveLocalDay(state.copyWith(tasks: nextTasks));
+  }
+
   Future<void> moveTaskType(String taskId, TodayTaskType type) async {
     if (_isSupabaseMode) {
       final updated = await _tasksRepository!.update(

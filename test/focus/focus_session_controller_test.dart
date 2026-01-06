@@ -135,6 +135,9 @@ class _FakeEngine implements RestrictionEngine {
   Future<void> requestPermissions() async {}
 
   @override
+  Future<void> configureApps() async {}
+
+  @override
   Future<void> startEmergencyException({required Duration duration}) async {}
 
   @override

@@ -1,6 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../app/env.dart';
 import '../../app/supabase.dart';
@@ -33,6 +37,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   bool _assistantLoading = false;
   String? _assistantSay;
 
+  final _assistantRingKey = GlobalKey();
+  final SpeechToText _speech = SpeechToText();
+  bool _speechReady = false;
+  bool _assistantListening = false;
+  String? _assistantSpeechError;
+
   static DateTime _dateOnly(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
   static bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
@@ -64,7 +74,120 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     _reflectionFocus.dispose();
     _habitAddController.dispose();
     _assistantController.dispose();
+    try {
+      _speech.cancel();
+    } catch (_) {
+      // Ignore.
+    }
     super.dispose();
+  }
+
+  Future<bool> _ensureSpeechReady() async {
+    if (_speechReady) return true;
+    try {
+      final ok = await _speech.initialize(
+        onError: (e) {
+          if (!mounted) return;
+          setState(() => _assistantSpeechError = e.errorMsg);
+        },
+      );
+      final hasPerm = await _speech.hasPermission;
+      if (!mounted) return false;
+      setState(() {
+        _speechReady = ok;
+        if (ok) {
+          _assistantSpeechError = null;
+        } else if (hasPerm == false) {
+          _assistantSpeechError =
+              'Microphone / Speech permission denied. Enable it in Settings and try again.';
+        } else if (_speech.isAvailable == false) {
+          _assistantSpeechError = 'Speech recognition is not available on this device.'
+              '${(defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android) ? ' (Tip: simulators sometimes don’t support this; try a physical device.)' : ''}';
+        } else {
+          _assistantSpeechError = _assistantSpeechError ?? 'Speech unavailable';
+        }
+      });
+      return ok;
+    } catch (_) {
+      if (!mounted) return false;
+      setState(() {
+        _assistantSpeechError = kIsWeb
+            ? 'Speech unavailable in this environment.'
+            : 'Speech unavailable';
+      });
+      return false;
+    }
+  }
+
+  void _setAssistantTranscript(String text) {
+    _assistantController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+
+  Future<void> _startAssistantListening() async {
+    if (_assistantLoading) return;
+    if (_assistantListening) return;
+
+    final ok = await _ensureSpeechReady();
+    if (!ok) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_assistantSpeechError ?? 'Speech unavailable')),
+      );
+      return;
+    }
+
+    final hasPerm = await _speech.hasPermission;
+    if (hasPerm == false) {
+      if (!mounted) return;
+      setState(() {
+        _assistantSpeechError =
+            'Microphone / Speech permission denied. Enable it in Settings and try again.';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_assistantSpeechError!)),
+      );
+      return;
+    }
+
+    HapticFeedback.selectionClick();
+    setState(() {
+      _assistantListening = true;
+      _assistantSpeechError = null;
+    });
+
+    await _speech.listen(
+      listenOptions: SpeechListenOptions(
+        listenMode: ListenMode.confirmation,
+        partialResults: true,
+      ),
+      onResult: (result) {
+        final words = result.recognizedWords.trim();
+        if (words.isEmpty) return;
+        _setAssistantTranscript(words);
+      },
+    );
+  }
+
+  Future<void> _stopAssistantListening() async {
+    if (!_assistantListening) return;
+    try {
+      await _speech.stop();
+    } catch (_) {
+      // Ignore stop errors; we'll still reset UI state.
+    }
+    if (!mounted) return;
+    HapticFeedback.selectionClick();
+    setState(() => _assistantListening = false);
+  }
+
+  Size? _assistantRingSize() {
+    final ctx = _assistantRingKey.currentContext;
+    final renderObject = ctx?.findRenderObject();
+    if (renderObject is! RenderBox) return null;
+    return renderObject.size;
   }
 
   Future<void> _pickDate() async {
@@ -176,59 +299,150 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         ),
         Gap.h16,
         const SectionHeader(title: 'Assistant'),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpace.s16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: _assistantController,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => _runAssistant(
-                    context,
-                    assistantClient: assistantClient,
-                    baseDate: _date,
+        Stack(
+          key: _assistantRingKey,
+          children: [
+            // Outline ring + content.
+            Container(
+              decoration: ShapeDecoration(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(
+                    width: 2.5,
+                    color: _assistantListening
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(context).dividerColor.withOpacity(0.9),
                   ),
-                  decoration: const InputDecoration(
-                    labelText: 'Tell me what to do',
-                    hintText: 'Ex: tomorrow add must win task: renew passport',
-                  ),
-                  enabled: !_assistantLoading,
                 ),
-                Gap.h12,
-                FilledButton.icon(
-                  onPressed: _assistantLoading
-                      ? null
-                      : () => _runAssistant(
-                            context,
-                            assistantClient: assistantClient,
-                            baseDate: _date,
+              ),
+              child: Card(
+                margin: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpace.s16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _assistantController,
+                              textInputAction: TextInputAction.send,
+                              onSubmitted: (_) => _runAssistant(
+                                assistantClient: assistantClient,
+                                baseDate: _date,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'Tell me what to do',
+                                hintText:
+                                    'Ex: tomorrow add must win task: renew passport',
+                                helperText: _assistantListening
+                                    ? 'Listening… keep holding the outline'
+                                    : 'Hold the outline to talk',
+                              ),
+                              enabled: !_assistantLoading,
+                            ),
                           ),
-                  icon: _assistantLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.send),
-                  label: Text(_assistantLoading ? 'Working…' : 'Run'),
-                ),
-                if ((_assistantSay ?? '').trim().isNotEmpty) ...[
-                  Gap.h12,
-                  Text(
-                    _assistantSay!,
-                    style: Theme.of(context).textTheme.bodyMedium,
+                          Gap.w8,
+                          Container(
+                            padding: const EdgeInsets.all(AppSpace.s8),
+                            decoration: BoxDecoration(
+                              color: _assistantListening
+                                  ? Theme.of(context)
+                                      .colorScheme
+                                      .primaryContainer
+                                      .withOpacity(0.65)
+                                  : Theme.of(context)
+                                      .colorScheme
+                                      .surfaceContainerHighest
+                                      .withOpacity(0.55),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              _assistantListening ? Icons.mic : Icons.mic_none,
+                              size: 18,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Gap.h12,
+                      FilledButton.icon(
+                        onPressed: _assistantLoading
+                            ? null
+                            : () => _runAssistant(
+                                  assistantClient: assistantClient,
+                                  baseDate: _date,
+                                ),
+                        icon: _assistantLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.send),
+                        label: Text(_assistantLoading ? 'Working…' : 'Run'),
+                      ),
+                      if ((_assistantSay ?? '').trim().isNotEmpty) ...[
+                        Gap.h12,
+                        Text(
+                          _assistantSay!,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ],
+                      if ((_assistantSpeechError ?? '').trim().isNotEmpty) ...[
+                        Gap.h8,
+                        Text(
+                          _assistantSpeechError!,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: Theme.of(context).colorScheme.error),
+                        ),
+                      ],
+                      Gap.h8,
+                      Text(
+                        'Tip: “note: …”, “complete task …”, “add habit …”',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ),
-                ],
-                Gap.h8,
-                Text(
-                  'Tip: “note: …”, “complete task …”, “add habit …”',
-                  style: Theme.of(context).textTheme.bodySmall,
                 ),
-              ],
+              ),
             ),
-          ),
+
+            // Press-and-hold handler: only starts if the long-press begins on the outline ring.
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onLongPressStart: (details) async {
+                  // Require the long-press to start on the outline ring.
+                  const ring = 14.0;
+                  final size = _assistantRingSize();
+                  if (size != null) {
+                    final pos = details.localPosition;
+                    final inRing = pos.dx <= ring ||
+                        pos.dy <= ring ||
+                        pos.dx >= (size.width - ring) ||
+                        pos.dy >= (size.height - ring);
+                    if (!inRing) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Hold the outline to talk')),
+                      );
+                      return;
+                    }
+                  }
+
+                  await _startAssistantListening();
+                },
+                onLongPressEnd: (_) => _stopAssistantListening(),
+                onLongPressCancel: _stopAssistantListening,
+              ),
+            ),
+          ],
         ),
         Gap.h16,
         SectionHeader(
@@ -544,6 +758,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 id: id, current: current, onSave: controller.updateTaskTitle),
             onDelete: (id) => controller.deleteTask(id),
             onMove: (id) => controller.moveTaskType(id, TodayTaskType.niceToDo),
+            onDetails: (id) => context.push('/home/today/task/$id?ymd=$ymd'),
           ),
         Gap.h16,
         SectionHeader(
@@ -571,6 +786,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 id: id, current: current, onSave: controller.updateTaskTitle),
             onDelete: (id) => controller.deleteTask(id),
             onMove: (id) => controller.moveTaskType(id, TodayTaskType.mustWin),
+            onDetails: (id) => context.push('/home/today/task/$id?ymd=$ymd'),
           ),
         Gap.h16,
         const SectionHeader(title: 'Reflection'),
@@ -603,11 +819,13 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     );
   }
 
-  Future<void> _runAssistant(
-    BuildContext context, {
+  Future<void> _runAssistant({
     required AssistantClient assistantClient,
     required DateTime baseDate,
   }) async {
+    if (_assistantListening) {
+      await _stopAssistantListening();
+    }
     final transcript = _assistantController.text.trim();
     if (transcript.isEmpty) return;
     if (_assistantLoading) return;
@@ -628,7 +846,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       if (!mounted) return;
       setState(() => _assistantSay = translation.say);
 
-      final executor = const AssistantExecutor();
+      const executor = AssistantExecutor();
       final result = await executor.execute(
         context: context,
         ref: ref,
@@ -665,8 +883,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         );
       }
     } finally {
-      if (!mounted) return;
-      setState(() => _assistantLoading = false);
+      if (mounted) {
+        setState(() => _assistantLoading = false);
+      }
     }
   }
 
@@ -762,6 +981,7 @@ class _TasksCard extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onMove,
+    required this.onDetails,
   });
 
   final List<TodayTask> tasks;
@@ -769,6 +989,7 @@ class _TasksCard extends StatelessWidget {
   final Future<void> Function(String taskId, String currentTitle) onEdit;
   final Future<void> Function(String taskId) onDelete;
   final Future<void> Function(String taskId) onMove;
+  final void Function(String taskId) onDetails;
 
   @override
   Widget build(BuildContext context) {
@@ -778,49 +999,58 @@ class _TasksCard extends StatelessWidget {
         child: Column(
           children: [
             for (final t in tasks)
-              ListTile(
-                leading: Checkbox(
-                  value: t.completed,
-                  onChanged: (_) => onToggle(t.id),
-                ),
-                title: Text(
-                  t.title,
-                  style: t.completed
-                      ? Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            decoration: TextDecoration.lineThrough,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurface
-                                .withOpacity(0.6),
-                          )
-                      : Theme.of(context).textTheme.bodyLarge,
-                ),
-                trailing: PopupMenuButton<String>(
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'edit':
-                        await onEdit(t.id, t.title);
-                        break;
-                      case 'move':
-                        await onMove(t.id);
-                        break;
-                      case 'delete':
-                        await onDelete(t.id);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Deleted')),
-                          );
-                        }
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    PopupMenuItem(
-                        value: 'move', child: Text('Move to other list')),
-                    PopupMenuDivider(),
-                    PopupMenuItem(value: 'delete', child: Text('Delete')),
-                  ],
+              GestureDetector(
+                onDoubleTap: () => onDetails(t.id),
+                behavior: HitTestBehavior.opaque,
+                child: ListTile(
+                  leading: Checkbox(
+                    value: t.completed,
+                    onChanged: (_) => onToggle(t.id),
+                  ),
+                  title: Text(
+                    t.title,
+                    style: t.completed
+                        ? Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              decoration: TextDecoration.lineThrough,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface
+                                  .withOpacity(0.6),
+                            )
+                        : Theme.of(context).textTheme.bodyLarge,
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (value) async {
+                      switch (value) {
+                        case 'details':
+                          onDetails(t.id);
+                          break;
+                        case 'edit':
+                          await onEdit(t.id, t.title);
+                          break;
+                        case 'move':
+                          await onMove(t.id);
+                          break;
+                        case 'delete':
+                          await onDelete(t.id);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Deleted')),
+                            );
+                          }
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'details', child: Text('Details')),
+                      PopupMenuDivider(),
+                      PopupMenuItem(value: 'edit', child: Text('Edit')),
+                      PopupMenuItem(
+                          value: 'move', child: Text('Move to other list')),
+                      PopupMenuDivider(),
+                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    ],
+                  ),
                 ),
               ),
           ],

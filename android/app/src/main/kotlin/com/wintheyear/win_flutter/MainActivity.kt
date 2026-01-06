@@ -37,6 +37,11 @@ class MainActivity: FlutterActivity() {
             result.success(null)
           }
 
+          "configureApps" -> {
+            // iOS-only concept. Android policies are configured in Flutter.
+            result.success(null)
+          }
+
           "startSession" -> {
             val args = call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()
             val endsAtMillis = (args["endsAtMillis"] as? Number)?.toLong() ?: 0L

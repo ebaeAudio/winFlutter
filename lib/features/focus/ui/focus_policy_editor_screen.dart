@@ -1,17 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../domain/focus/app_identifier.dart';
 import '../../../domain/focus/focus_friction.dart';
 import '../../../domain/focus/focus_policy.dart';
 import '../../../ui/app_scaffold.dart';
 import '../focus_policy_controller.dart';
+import '../focus_providers.dart';
 
 class FocusPolicyEditorScreen extends ConsumerStatefulWidget {
-  const FocusPolicyEditorScreen({super.key, required this.policyId});
+  const FocusPolicyEditorScreen({
+    super.key,
+    required this.policyId,
+    this.closeOnSave = false,
+  });
 
   final String policyId;
+  final bool closeOnSave;
 
   @override
   ConsumerState<FocusPolicyEditorScreen> createState() =>
@@ -38,6 +45,7 @@ class _FocusPolicyEditorScreenState extends ConsumerState<FocusPolicyEditorScree
   @override
   Widget build(BuildContext context) {
     final isIOS = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+    final engine = ref.read(restrictionEngineProvider);
     final policies = ref.watch(focusPolicyListProvider).valueOrNull ?? const [];
     _policy ??= policies.where((p) => p.id == widget.policyId).firstOrNull;
     final policy = _policy;
@@ -69,11 +77,25 @@ class _FocusPolicyEditorScreenState extends ConsumerState<FocusPolicyEditorScree
               name: _name.text.trim(),
               updatedAt: DateTime.now(),
             );
-            await ref.read(focusPolicyListProvider.notifier).upsert(updated);
+            final controller = ref.read(focusPolicyListProvider.notifier);
+            await controller.upsert(updated);
             if (!context.mounted) return;
+
+            final result = ref.read(focusPolicyListProvider);
+            if (result.hasError) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Failed to save policy: ${result.error}')),
+              );
+              return;
+            }
+
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Policy saved')),
             );
+
+            if (widget.closeOnSave) {
+              context.go('/home/focus/policies');
+            }
           },
           icon: const Icon(Icons.save),
         ),
@@ -97,6 +119,52 @@ class _FocusPolicyEditorScreenState extends ConsumerState<FocusPolicyEditorScree
                 policy: policy,
                 onChanged: (p) => setState(() => _policy = p),
               ),
+              if (isIOS) ...[
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'iOS app blocking',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'On iOS, app blocking requires Apple’s Screen Time picker to select apps to block. '
+                          'The “Allowed apps” list above is primarily used for Android.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 10),
+                        FilledButton.icon(
+                          onPressed: () async {
+                            try {
+                              await engine.configureApps();
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Updated iOS blocked apps selection'),
+                                ),
+                              );
+                            } catch (e) {
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to open iOS app picker: $e'),
+                                ),
+                              );
+                            }
+                          },
+                          icon: const Icon(Icons.apps),
+                          label: const Text('Choose apps to block (iOS)'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               _FrictionEditor(
                 friction: policy.friction,
