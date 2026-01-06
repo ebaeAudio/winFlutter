@@ -40,5 +40,16 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    # Xcode's clang dependency scanner can fail to build the CwlCatchExceptionSupport
+    # module because its umbrella header imports <CwlCatchException.h>, which may not
+    # yet exist in the built framework headers at scan time. Point the header search
+    # path at the pod's source include directory so the header is always resolvable.
+    if target.name == 'CwlCatchExceptionSupport'
+      target.build_configurations.each do |config|
+        config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited)'
+        config.build_settings['HEADER_SEARCH_PATHS'] << ' "${PODS_TARGET_SRCROOT}/Sources/CwlCatchExceptionSupport/include"'
+      end
+    end
   end
 end
