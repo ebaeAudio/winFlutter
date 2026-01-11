@@ -22,6 +22,7 @@ class Task {
     required this.id,
     required this.userId,
     required this.title,
+    required this.details,
     required this.type,
     required this.date,
     required this.completed,
@@ -36,6 +37,7 @@ class Task {
   final String userId;
 
   final String title;
+  final String? details;
   final TaskType type;
 
   /// YYYY-MM-DD
@@ -52,6 +54,7 @@ class Task {
       id: (json['id'] as String?) ?? '',
       userId: (json['user_id'] as String?) ?? '',
       title: (json['title'] as String?) ?? '',
+      details: (json['details'] as String?),
       type: TaskType.fromDb((json['type'] as String?) ?? ''),
       date: (json['date'] as String?) ?? '',
       completed: (json['completed'] as bool?) ?? false,

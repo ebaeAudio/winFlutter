@@ -11,7 +11,8 @@ final trackersListProvider =
 
 class TrackersListController extends AsyncNotifier<List<Tracker>> {
   TrackersRepository get _repo =>
-      ref.read(trackersRepositoryProvider) ?? ref.read(localTrackersRepositoryProvider);
+      ref.read(trackersRepositoryProvider) ??
+      ref.read(localTrackersRepositoryProvider);
 
   @override
   Future<List<Tracker>> build() async {
@@ -46,5 +47,3 @@ class TrackersListController extends AsyncNotifier<List<Tracker>> {
     return updated;
   }
 }
-
-

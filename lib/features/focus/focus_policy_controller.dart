@@ -52,5 +52,3 @@ class FocusPolicyListController extends AsyncNotifier<List<FocusPolicy>> {
     });
   }
 }
-
-

@@ -27,12 +27,12 @@ class FocusDashboardScreen extends ConsumerWidget {
       actions: [
         IconButton(
           tooltip: 'History',
-          onPressed: () => context.go('/home/focus/history'),
+          onPressed: () => context.go('/focus/history'),
           icon: const Icon(Icons.history),
         ),
         IconButton(
           tooltip: 'Policies',
-          onPressed: () => context.go('/home/focus/policies'),
+          onPressed: () => context.go('/focus/policies'),
           icon: const Icon(Icons.tune),
         ),
       ],
@@ -227,7 +227,7 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
             const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: policies.isEmpty || _policyId == null
-                  ? () => context.go('/home/focus/policies')
+                  ? () => context.go('/focus/policies')
                   : () async {
                       final policy = selected;
                       if (policy == null) return;
@@ -254,7 +254,7 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                           .read(todayControllerProvider(ymd).notifier)
                           .enableFocusModeAndSelectDefaultTask();
                       if (!context.mounted) return;
-                      context.go('/home/today');
+                      context.go('/today');
                     },
               icon: const Icon(Icons.play_arrow),
               label:

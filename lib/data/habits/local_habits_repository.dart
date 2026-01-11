@@ -25,7 +25,9 @@ class LocalHabitsRepository implements HabitsRepository {
             out.add(Habit.fromJson(Map<String, Object?>.from(item)));
           }
         }
-        return out.where((h) => h.id.trim().isNotEmpty && h.name.trim().isNotEmpty).toList();
+        return out
+            .where((h) => h.id.trim().isNotEmpty && h.name.trim().isNotEmpty)
+            .toList();
       }
     } catch (_) {
       // ignore
@@ -95,5 +97,3 @@ class LocalHabitsRepository implements HabitsRepository {
     await _prefs.setString(_completedKey(ymd), jsonEncode(set.toList()));
   }
 }
-
-

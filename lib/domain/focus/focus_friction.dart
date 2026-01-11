@@ -35,7 +35,8 @@ class FocusFrictionSettings {
     return FocusFrictionSettings(
       holdToUnlockSeconds: holdToUnlockSeconds ?? this.holdToUnlockSeconds,
       unlockDelaySeconds: unlockDelaySeconds ?? this.unlockDelaySeconds,
-      emergencyUnlockMinutes: emergencyUnlockMinutes ?? this.emergencyUnlockMinutes,
+      emergencyUnlockMinutes:
+          emergencyUnlockMinutes ?? this.emergencyUnlockMinutes,
       maxEmergencyUnlocksPerSession:
           maxEmergencyUnlocksPerSession ?? this.maxEmergencyUnlocksPerSession,
     );
@@ -54,12 +55,11 @@ class FocusFrictionSettings {
             defaults.holdToUnlockSeconds,
         unlockDelaySeconds: (json['unlockDelaySeconds'] as num?)?.toInt() ??
             defaults.unlockDelaySeconds,
-        emergencyUnlockMinutes: (json['emergencyUnlockMinutes'] as num?)?.toInt() ??
-            defaults.emergencyUnlockMinutes,
+        emergencyUnlockMinutes:
+            (json['emergencyUnlockMinutes'] as num?)?.toInt() ??
+                defaults.emergencyUnlockMinutes,
         maxEmergencyUnlocksPerSession:
             (json['maxEmergencyUnlocksPerSession'] as num?)?.toInt() ??
                 defaults.maxEmergencyUnlocksPerSession,
       );
 }
-
-

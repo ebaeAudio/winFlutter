@@ -51,7 +51,8 @@ class FocusPolicy {
   Map<String, Object?> toJson() => {
         'id': id,
         'name': name,
-        'allowedApps': allowedApps.map((a) => a.toJson()).toList(growable: false),
+        'allowedApps':
+            allowedApps.map((a) => a.toJson()).toList(growable: false),
         'friction': friction.toJson(),
         if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
         if (updatedAt != null) 'updatedAt': updatedAt!.toIso8601String(),
@@ -94,5 +95,3 @@ class FocusPolicy {
   static String listToJsonString(List<FocusPolicy> policies) =>
       jsonEncode(policies.map((p) => p.toJson()).toList(growable: false));
 }
-
-

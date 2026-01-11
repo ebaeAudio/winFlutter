@@ -85,5 +85,3 @@ class FocusHistoryScreen extends ConsumerWidget {
     );
   }
 }
-
-

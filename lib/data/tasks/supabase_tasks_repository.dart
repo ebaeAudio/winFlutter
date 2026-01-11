@@ -21,12 +21,23 @@ class SupabaseTasksRepository implements TasksRepository {
   Future<List<Task>> listForDate({required String ymd}) async {
     final uid = _requireUserId();
 
-    final rows = await _client
-        .from('tasks')
-        .select('id,user_id,title,type,date,completed,created_at,updated_at')
-        .eq('user_id', uid)
-        .eq('date', ymd)
-        .order('created_at', ascending: true);
+    dynamic rows;
+    try {
+      rows = await _client
+          .from('tasks')
+          .select('id,user_id,title,details,type,date,completed,created_at,updated_at')
+          .eq('user_id', uid)
+          .eq('date', ymd)
+          .order('created_at', ascending: true);
+    } catch (_) {
+      // Back-compat for older schemas where `details` isn't migrated yet.
+      rows = await _client
+          .from('tasks')
+          .select('id,user_id,title,type,date,completed,created_at,updated_at')
+          .eq('user_id', uid)
+          .eq('date', ymd)
+          .order('created_at', ascending: true);
+    }
     final list = rows as List;
     return [
       for (final row in list)
@@ -42,17 +53,33 @@ class SupabaseTasksRepository implements TasksRepository {
   }) async {
     final uid = _requireUserId();
 
-    final row = await _client
-        .from('tasks')
-        .insert({
-          'user_id': uid,
-          'title': title,
-          'type': type.dbValue,
-          'date': ymd,
-          'completed': false,
-        })
-        .select('id,user_id,title,type,date,completed,created_at,updated_at')
-        .single();
+    dynamic row;
+    try {
+      row = await _client
+          .from('tasks')
+          .insert({
+            'user_id': uid,
+            'title': title,
+            'type': type.dbValue,
+            'date': ymd,
+            'completed': false,
+          })
+          .select('id,user_id,title,details,type,date,completed,created_at,updated_at')
+          .single();
+    } catch (_) {
+      // Back-compat for older schemas where `details` isn't migrated yet.
+      row = await _client
+          .from('tasks')
+          .insert({
+            'user_id': uid,
+            'title': title,
+            'type': type.dbValue,
+            'date': ymd,
+            'completed': false,
+          })
+          .select('id,user_id,title,type,date,completed,created_at,updated_at')
+          .single();
+    }
 
     return Task.fromDbJson(Map<String, Object?>.from(row));
   }
@@ -61,22 +88,40 @@ class SupabaseTasksRepository implements TasksRepository {
   Future<Task> update({
     required String id,
     String? title,
+    String? details,
     TaskType? type,
+    String? ymd,
     bool? completed,
   }) async {
     final _ = _requireUserId();
 
     final patch = <String, Object?>{};
     if (title != null) patch['title'] = title;
+    if (details != null) {
+      final trimmed = details.trim();
+      patch['details'] = trimmed.isEmpty ? null : trimmed;
+    }
     if (type != null) patch['type'] = type.dbValue;
+    if (ymd != null) patch['date'] = ymd;
     if (completed != null) patch['completed'] = completed;
 
-    final row = await _client
-        .from('tasks')
-        .update(patch)
-        .eq('id', id)
-        .select('id,user_id,title,type,date,completed,created_at,updated_at')
-        .single();
+    dynamic row;
+    try {
+      row = await _client
+          .from('tasks')
+          .update(patch)
+          .eq('id', id)
+          .select('id,user_id,title,details,type,date,completed,created_at,updated_at')
+          .single();
+    } catch (_) {
+      // Back-compat for older schemas where `details` isn't migrated yet.
+      row = await _client
+          .from('tasks')
+          .update(patch..remove('details'))
+          .eq('id', id)
+          .select('id,user_id,title,type,date,completed,created_at,updated_at')
+          .single();
+    }
 
     return Task.fromDbJson(Map<String, Object?>.from(row));
   }

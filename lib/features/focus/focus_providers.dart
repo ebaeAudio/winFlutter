@@ -21,5 +21,3 @@ final focusSessionRepositoryProvider = Provider<FocusSessionRepository>((ref) {
 final restrictionEngineProvider = Provider<RestrictionEngine>((ref) {
   return const MethodChannelRestrictionEngine();
 });
-
-

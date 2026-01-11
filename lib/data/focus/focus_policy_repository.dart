@@ -6,5 +6,3 @@ abstract class FocusPolicyRepository {
   Future<void> upsertPolicy(FocusPolicy policy);
   Future<void> deletePolicy(String id);
 }
-
-

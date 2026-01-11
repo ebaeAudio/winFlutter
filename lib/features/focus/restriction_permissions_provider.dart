@@ -8,5 +8,3 @@ final restrictionPermissionsProvider =
   final engine = ref.read(restrictionEngineProvider);
   return engine.getPermissions();
 });
-
-

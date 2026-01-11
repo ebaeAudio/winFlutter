@@ -20,5 +20,3 @@ abstract interface class TrackerTalliesRepository {
     required int delta,
   });
 }
-
-

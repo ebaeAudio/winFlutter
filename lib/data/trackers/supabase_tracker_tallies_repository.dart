@@ -162,5 +162,3 @@ class SupabaseTrackerTalliesRepository implements TrackerTalliesRepository {
     return clamped;
   }
 }
-
-

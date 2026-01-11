@@ -14,5 +14,3 @@ abstract class HabitsRepository {
     required bool completed,
   });
 }
-
-

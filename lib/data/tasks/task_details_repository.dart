@@ -25,5 +25,3 @@ abstract interface class TaskDetailsRepository {
 
   Future<void> deleteSubtask({required String subtaskId});
 }
-
-

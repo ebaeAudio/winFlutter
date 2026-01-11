@@ -25,7 +25,8 @@ class FocusPolicyEditorScreen extends ConsumerStatefulWidget {
       _FocusPolicyEditorScreenState();
 }
 
-class _FocusPolicyEditorScreenState extends ConsumerState<FocusPolicyEditorScreen> {
+class _FocusPolicyEditorScreenState
+    extends ConsumerState<FocusPolicyEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
   FocusPolicy? _policy;
@@ -84,7 +85,8 @@ class _FocusPolicyEditorScreenState extends ConsumerState<FocusPolicyEditorScree
             final result = ref.read(focusPolicyListProvider);
             if (result.hasError) {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Failed to save policy: ${result.error}')),
+                SnackBar(
+                    content: Text('Failed to save policy: ${result.error}')),
               );
               return;
             }
@@ -94,7 +96,7 @@ class _FocusPolicyEditorScreenState extends ConsumerState<FocusPolicyEditorScree
             );
 
             if (widget.closeOnSave) {
-              context.go('/home/focus/policies');
+              context.go('/focus/policies');
             }
           },
           icon: const Icon(Icons.save),
@@ -145,14 +147,16 @@ class _FocusPolicyEditorScreenState extends ConsumerState<FocusPolicyEditorScree
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
-                                  content: Text('Updated iOS blocked apps selection'),
+                                  content: Text(
+                                      'Updated iOS blocked apps selection'),
                                 ),
                               );
                             } catch (e) {
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Failed to open iOS app picker: $e'),
+                                  content:
+                                      Text('Failed to open iOS app picker: $e'),
                                 ),
                               );
                             }
@@ -168,7 +172,8 @@ class _FocusPolicyEditorScreenState extends ConsumerState<FocusPolicyEditorScree
               const SizedBox(height: 12),
               _FrictionEditor(
                 friction: policy.friction,
-                onChanged: (f) => setState(() => _policy = policy.copyWith(friction: f)),
+                onChanged: (f) =>
+                    setState(() => _policy = policy.copyWith(friction: f)),
               ),
               const SizedBox(height: 12),
               Card(
@@ -205,7 +210,8 @@ class _AllowedAppsEditor extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Allowed apps', style: Theme.of(context).textTheme.titleMedium),
+            Text('Allowed apps',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -218,7 +224,8 @@ class _AllowedAppsEditor extends StatelessWidget {
                       onChanged(
                         policy.copyWith(
                           allowedApps: policy.allowedApps
-                              .where((x) => x.id != a.id || x.platform != a.platform)
+                              .where((x) =>
+                                  x.id != a.id || x.platform != a.platform)
                               .toList(growable: false),
                         ),
                       );
@@ -273,8 +280,8 @@ class _AllowedAppsEditor extends StatelessWidget {
                   const SizedBox(height: 8),
                   TextField(
                     controller: name,
-                    decoration:
-                        const InputDecoration(labelText: 'Display name (optional)'),
+                    decoration: const InputDecoration(
+                        labelText: 'Display name (optional)'),
                   ),
                 ],
               ),
@@ -380,7 +387,8 @@ class _FrictionEditorState extends State<_FrictionEditor> {
               min: 0,
               max: 10,
               onChanged: (v) {
-                setState(() => _f = _f.copyWith(maxEmergencyUnlocksPerSession: v));
+                setState(
+                    () => _f = _f.copyWith(maxEmergencyUnlocksPerSession: v));
                 widget.onChanged(_f);
               },
             ),
@@ -428,5 +436,3 @@ class _NumberRow extends StatelessWidget {
 extension<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
 }
-
-

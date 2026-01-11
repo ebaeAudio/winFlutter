@@ -33,5 +33,3 @@ String? matchHabitIdByName(List<TodayHabit> habits, String query) {
   matches.sort((a, b) => a.name.length.compareTo(b.name.length));
   return matches.first.id;
 }
-
-

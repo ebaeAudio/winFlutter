@@ -32,6 +32,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Win the Year'), findsOneWidget);
+    // App defaults to the Today screen (demo mode avoids auth/setup redirects).
+    expect(find.text('Today'), findsWidgets);
   });
 }

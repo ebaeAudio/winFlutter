@@ -7,5 +7,3 @@ final nowTickerProvider = StreamProvider<DateTime>((ref) {
     (_) => DateTime.now(),
   );
 });
-
-

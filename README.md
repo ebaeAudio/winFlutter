@@ -48,7 +48,15 @@ This repo is an **active scaffold/MVP** with working navigation, auth gating, th
 flutter pub get
 ```
 
-### Run (fastest path: demo mode)
+### Run
+
+By default, demo mode is **off** (unless you explicitly enable it via `DEMO_MODE=true`).
+
+```bash
+flutter run
+```
+
+Optional (demo mode):
 
 ```bash
 flutter run --dart-define=DEMO_MODE=true

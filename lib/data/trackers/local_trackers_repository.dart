@@ -152,5 +152,3 @@ class LocalTrackersRepository implements TrackersRepository {
     return updated;
   }
 }
-
-

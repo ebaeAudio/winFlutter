@@ -49,5 +49,3 @@ class AppIdentifier {
   static String listToJsonString(List<AppIdentifier> apps) =>
       jsonEncode(apps.map((a) => a.toJson()).toList(growable: false));
 }
-
-

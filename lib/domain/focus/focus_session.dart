@@ -59,14 +59,18 @@ class FocusSession {
           orElse: () => FocusSessionStatus.ended,
         ),
         endedAt: _dt(json['endedAt'] as String?),
-        endReason: FocusSessionEndReason.values.cast<FocusSessionEndReason?>().firstWhere(
+        endReason: FocusSessionEndReason.values
+            .cast<FocusSessionEndReason?>()
+            .firstWhere(
               (r) => r?.name == (json['endReason'] as String?),
               orElse: () => null,
             ),
-        emergencyUnlocksUsed: (json['emergencyUnlocksUsed'] as num?)?.toInt() ?? 0,
+        emergencyUnlocksUsed:
+            (json['emergencyUnlocksUsed'] as num?)?.toInt() ?? 0,
       );
 
-  static DateTime? _dt(String? raw) => raw == null ? null : DateTime.tryParse(raw);
+  static DateTime? _dt(String? raw) =>
+      raw == null ? null : DateTime.tryParse(raw);
 
   static List<FocusSession> listFromJsonString(String raw) {
     final decoded = jsonDecode(raw);
@@ -80,5 +84,3 @@ class FocusSession {
   static String listToJsonString(List<FocusSession> sessions) =>
       jsonEncode(sessions.map((s) => s.toJson()).toList(growable: false));
 }
-
-

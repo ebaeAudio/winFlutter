@@ -9,7 +9,11 @@ import '../../ui/components/section_header.dart';
 import '../../ui/spacing.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
-  const AuthScreen({super.key});
+  const AuthScreen({super.key, this.next});
+
+  /// Safe relative path to return to after successful sign-in.
+  /// Note: routing redirect logic is responsible for honoring this value.
+  final String? next;
 
   @override
   ConsumerState<AuthScreen> createState() => _AuthScreenState();

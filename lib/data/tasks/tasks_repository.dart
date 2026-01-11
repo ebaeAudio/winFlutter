@@ -12,7 +12,11 @@ abstract interface class TasksRepository {
   Future<Task> update({
     required String id,
     String? title,
+    String? details,
     TaskType? type,
+
+    /// YYYY-MM-DD
+    String? ymd,
     bool? completed,
   });
 
