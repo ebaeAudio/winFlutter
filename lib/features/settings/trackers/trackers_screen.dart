@@ -21,7 +21,7 @@ class TrackersScreen extends ConsumerWidget {
       actions: [
         IconButton(
           tooltip: 'Create',
-          onPressed: () => context.go('/home/settings/trackers/new'),
+          onPressed: () => context.go('/settings/trackers/new'),
           icon: const Icon(Icons.add),
         ),
       ],
@@ -45,7 +45,7 @@ class TrackersScreen extends ConsumerWidget {
                 description:
                     'Track three quick-tally items (emoji + description) right from Today.',
                 ctaLabel: 'Create tracker',
-                onCtaPressed: () => context.go('/home/settings/trackers/new'),
+                onCtaPressed: () => context.go('/settings/trackers/new'),
               );
             }
 
@@ -81,7 +81,10 @@ class _TrackerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final emojis = tracker.items.map((i) => i.emoji).where((e) => e.trim().isNotEmpty).join(' ');
+    final emojis = tracker.items
+        .map((i) => i.emoji)
+        .where((e) => e.trim().isNotEmpty)
+        .join(' ');
     final subtitle = emojis.isEmpty ? '3 items' : emojis;
 
     return Card(
@@ -89,10 +92,8 @@ class _TrackerTile extends StatelessWidget {
         title: Text(tracker.name),
         subtitle: Text(subtitle),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () => context.go('/home/settings/trackers/edit/${tracker.id}'),
+        onTap: () => context.go('/settings/trackers/edit/${tracker.id}'),
       ),
     );
   }
 }
-
-

@@ -101,7 +101,8 @@ class TodayTrackersController extends StateNotifier<TodayTrackersData> {
   Future<void> _load() async {
     try {
       final all = await _trackersRepository.listAll();
-      final active = all.where((t) => !t.archived && t.items.isNotEmpty).toList();
+      final active =
+          all.where((t) => !t.archived && t.items.isNotEmpty).toList();
       final trackerIds = [for (final t in active) t.id];
 
       final todayTallies = await _talliesRepository.listForDate(ymd: _ymd);
@@ -110,10 +111,12 @@ class TodayTrackersController extends StateNotifier<TodayTrackersData> {
       };
 
       final needsWeekly = active.any(
-        (t) => t.items.any((i) => i.hasTarget && i.targetCadence == TargetCadence.weekly),
+        (t) => t.items
+            .any((i) => i.hasTarget && i.targetCadence == TargetCadence.weekly),
       );
       final needsYearly = active.any(
-        (t) => t.items.any((i) => i.hasTarget && i.targetCadence == TargetCadence.yearly),
+        (t) => t.items
+            .any((i) => i.hasTarget && i.targetCadence == TargetCadence.yearly),
       );
 
       final weeklyMap = <String, int>{};
@@ -239,10 +242,12 @@ class TodayTrackersController extends StateNotifier<TodayTrackersData> {
                       item: iv.item,
                       todayCount: next,
                       progressCount: switch (cadence) {
-                        TargetCadence.weekly || TargetCadence.yearly =>
+                        TargetCadence.weekly ||
+                        TargetCadence.yearly =>
                           ((prevProgress ?? iv.progressCount) + actualDelta) < 0
                               ? 0
-                              : ((prevProgress ?? iv.progressCount) + actualDelta),
+                              : ((prevProgress ?? iv.progressCount) +
+                                  actualDelta),
                         _ => next,
                       },
                     ),
@@ -287,5 +292,3 @@ class _DateRange {
   final String startYmd;
   final String endYmd;
 }
-
-

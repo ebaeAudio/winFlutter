@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/auth_screen.dart';
-import '../features/home/home_screen.dart';
 import '../features/focus/ui/focus_entry_screen.dart';
 import '../features/focus/ui/focus_history_screen.dart';
 import '../features/focus/ui/focus_policies_screen.dart';
@@ -13,9 +12,24 @@ import '../features/settings/settings_screen.dart';
 import '../features/settings/trackers/tracker_editor_screen.dart';
 import '../features/settings/trackers/trackers_screen.dart';
 import '../features/setup/setup_screen.dart';
+import '../features/tasks/all_tasks_screen.dart';
 import '../features/today/today_screen.dart';
 import '../features/tasks/task_details_screen.dart';
+import '../ui/nav_shell.dart';
 import 'auth.dart';
+
+String? _safeRelativeLocationFromNextParam(String? nextParam) {
+  if (nextParam == null || nextParam.trim().isEmpty) return null;
+  final decoded = Uri.decodeComponent(nextParam.trim());
+
+  // Only allow safe, app-internal relative paths.
+  if (!decoded.startsWith('/')) return null;
+  final uri = Uri.tryParse(decoded);
+  if (uri == null) return null;
+  if (uri.hasScheme || uri.hasAuthority) return null;
+
+  return uri.toString();
+}
 
 final _routerRefreshNotifierProvider = Provider<_RouterRefreshNotifier>((ref) {
   final notifier = _RouterRefreshNotifier();
@@ -30,7 +44,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = ref.watch(_routerRefreshNotifierProvider);
 
   return GoRouter(
-    initialLocation: '/home',
+    initialLocation: '/today',
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
       final isSignedIn = auth?.isSignedIn == true;
@@ -44,11 +58,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       if (!isSignedIn) {
-        return goingToAuth ? null : '/auth';
+        if (goingToAuth) return null;
+        final next = Uri.encodeComponent(state.uri.toString());
+        return '/auth?next=$next';
       }
 
       if (isSignedIn && (goingToAuth || goingToSetup)) {
-        return '/home';
+        final safeNext =
+            _safeRelativeLocationFromNextParam(state.uri.queryParameters['next']);
+        return safeNext ?? '/today';
       }
 
       return null;
@@ -60,71 +78,114 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/auth',
-        builder: (context, state) => const AuthScreen(),
+        builder: (context, state) => AuthScreen(
+          next: state.uri.queryParameters['next'],
+        ),
       ),
       GoRoute(
+        // Legacy URLs (keep for safety): redirect /home/* -> /* while preserving query params.
         path: '/home',
-        builder: (context, state) => const HomeScreen(),
+        redirect: (context, state) => '/today',
         routes: [
           GoRoute(
-            path: 'today',
-            builder: (context, state) => const TodayScreen(),
-            routes: [
-              GoRoute(
-                path: 'task/:id',
-                builder: (context, state) => TaskDetailsScreen(
-                  taskId: state.pathParameters['id'] ?? '',
-                  ymd: state.uri.queryParameters['ymd'] ?? '',
-                ),
-              ),
-            ],
+            path: ':rest(.*)',
+            redirect: (context, state) {
+              final rest = state.pathParameters['rest'] ?? '';
+              final query = state.uri.hasQuery ? '?${state.uri.query}' : '';
+              return '/$rest$query';
+            },
           ),
-          GoRoute(
-            path: 'focus',
-            builder: (context, state) => const FocusEntryScreen(),
+        ],
+      ),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            NavShell(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
             routes: [
               GoRoute(
-                path: 'policies',
-                builder: (context, state) => const FocusPoliciesScreen(),
+                path: '/today',
+                builder: (context, state) => const TodayScreen(),
                 routes: [
                   GoRoute(
-                    path: 'edit/:id',
-                    builder: (context, state) => FocusPolicyEditorScreen(
-                      policyId: state.pathParameters['id'] ?? '',
-                      closeOnSave:
-                          (state.uri.queryParameters['closeOnSave'] ?? '') == '1',
+                    path: 'task/:id',
+                    builder: (context, state) => TaskDetailsScreen(
+                      taskId: state.pathParameters['id'] ?? '',
+                      ymd: state.uri.queryParameters['ymd'] ?? '',
                     ),
                   ),
                 ],
               ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
               GoRoute(
-                path: 'history',
-                builder: (context, state) => const FocusHistoryScreen(),
+                path: '/tasks',
+                builder: (context, state) => const AllTasksScreen(),
               ),
             ],
           ),
-          GoRoute(
-            path: 'rollups',
-            builder: (context, state) => const RollupsScreen(),
-          ),
-          GoRoute(
-            path: 'settings',
-            builder: (context, state) => const SettingsScreen(),
+          StatefulShellBranch(
             routes: [
               GoRoute(
-                path: 'trackers',
-                builder: (context, state) => const TrackersScreen(),
+                path: '/focus',
+                builder: (context, state) => const FocusEntryScreen(),
                 routes: [
                   GoRoute(
-                    path: 'new',
-                    builder: (context, state) =>
-                        const TrackerEditorScreen(trackerId: null),
+                    path: 'policies',
+                    builder: (context, state) => const FocusPoliciesScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'edit/:id',
+                        builder: (context, state) => FocusPolicyEditorScreen(
+                          policyId: state.pathParameters['id'] ?? '',
+                          closeOnSave:
+                              (state.uri.queryParameters['closeOnSave'] ??
+                                      '') ==
+                                  '1',
+                        ),
+                      ),
+                    ],
                   ),
                   GoRoute(
-                    path: 'edit/:id',
-                    builder: (context, state) => TrackerEditorScreen(
-                      trackerId: state.pathParameters['id'],
-                    ),
+                    path: 'history',
+                    builder: (context, state) => const FocusHistoryScreen(),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/rollups',
+                builder: (context, state) => const RollupsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/settings',
+                builder: (context, state) => const SettingsScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'trackers',
+                    builder: (context, state) => const TrackersScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'new',
+                        builder: (context, state) =>
+                            const TrackerEditorScreen(trackerId: null),
+                      ),
+                      GoRoute(
+                        path: 'edit/:id',
+                        builder: (context, state) => TrackerEditorScreen(
+                          trackerId: state.pathParameters['id'],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

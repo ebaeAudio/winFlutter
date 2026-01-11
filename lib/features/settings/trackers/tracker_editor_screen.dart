@@ -18,7 +18,8 @@ class TrackerEditorScreen extends ConsumerStatefulWidget {
   final String? trackerId;
 
   @override
-  ConsumerState<TrackerEditorScreen> createState() => _TrackerEditorScreenState();
+  ConsumerState<TrackerEditorScreen> createState() =>
+      _TrackerEditorScreenState();
 }
 
 class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
@@ -163,7 +164,8 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
         if (!_isNew)
           IconButton(
             tooltip: (tracker!.archived) ? 'Unarchive' : 'Archive',
-            icon: Icon(tracker.archived ? Icons.unarchive : Icons.archive_outlined),
+            icon: Icon(
+                tracker.archived ? Icons.unarchive : Icons.archive_outlined),
             onPressed: () => _toggleArchive(context, tracker: tracker!),
           ),
       ],
@@ -210,7 +212,8 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
             cadence: _targetCadence[i] ?? TargetCadence.daily,
             canRemove: _itemKeys.length > 1,
             onRemove: () => setState(() => _removeItemAt(i)),
-            onTargetEnabledChanged: (v) => setState(() => _targetEnabled[i] = v),
+            onTargetEnabledChanged: (v) =>
+                setState(() => _targetEnabled[i] = v),
             onCadenceChanged: (v) => setState(() => _targetCadence[i] = v),
           ),
           Gap.h12,
@@ -225,12 +228,14 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
     );
   }
 
-  Future<void> _toggleArchive(BuildContext context, {required Tracker tracker}) async {
+  Future<void> _toggleArchive(BuildContext context,
+      {required Tracker tracker}) async {
     final wantArchive = !tracker.archived;
     final ok = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: Text(wantArchive ? 'Archive tracker?' : 'Unarchive tracker?'),
+            title:
+                Text(wantArchive ? 'Archive tracker?' : 'Unarchive tracker?'),
             content: Text(
               wantArchive
                   ? 'This hides it from Today but keeps historical tallies.'
@@ -273,7 +278,8 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
       final desc = _descControllers[i].text.trim();
       if (emoji.isEmpty || desc.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Each item needs an emoji + description')),
+          const SnackBar(
+              content: Text('Each item needs an emoji + description')),
         );
         return;
       }
@@ -306,7 +312,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
             .read(trackersListProvider.notifier)
             .create(name: name, items: items);
         if (!context.mounted) return;
-        context.go('/home/settings/trackers/edit/${created.id}');
+        context.go('/settings/trackers/edit/${created.id}');
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Tracker created')));
       } else {
@@ -471,5 +477,3 @@ class _ItemEditor extends StatelessWidget {
 extension<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
 }
-
-

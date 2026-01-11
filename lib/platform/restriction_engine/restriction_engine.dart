@@ -45,5 +45,3 @@ abstract class RestrictionEngine {
   /// Optional: record a short emergency exception window.
   Future<void> startEmergencyException({required Duration duration});
 }
-
-

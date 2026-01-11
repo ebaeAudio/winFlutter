@@ -14,6 +14,11 @@ class NavShell extends StatelessWidget {
         selectedIndex: navigationShell.currentIndex,
         destinations: const [
           NavigationDestination(icon: Icon(Icons.today), label: 'Today'),
+          NavigationDestination(
+            icon: Icon(Icons.check_circle_outline),
+            label: 'Tasks',
+          ),
+          NavigationDestination(icon: Icon(Icons.lock), label: 'Focus'),
           NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Rollups'),
           NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
         ],

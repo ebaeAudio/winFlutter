@@ -8,7 +8,9 @@ String _clamp(String s, int max) {
 
 AssistantTaskType? _inferTaskType(String s) {
   final t = s.toLowerCase();
-  if (t.contains('must win') || t.contains('must-win') || t.contains('mustwin')) {
+  if (t.contains('must win') ||
+      t.contains('must-win') ||
+      t.contains('mustwin')) {
     return AssistantTaskType.mustWin;
   }
   if (t.contains('nice to do') ||
@@ -92,7 +94,8 @@ AssistantTranslation heuristicTranslate({
   }
   if (actionLower.startsWith('set reflection:') ||
       actionLower.startsWith('set reflection ')) {
-    final text = _stripPrefix(actionRaw, ['set reflection:', 'set reflection ']);
+    final text =
+        _stripPrefix(actionRaw, ['set reflection:', 'set reflection ']);
     commands.add(ReflectionSetCommand(text: _clamp(text, 4000)));
     return AssistantTranslation(say: 'Saved.', commands: commands);
   }
@@ -109,17 +112,23 @@ AssistantTranslation heuristicTranslate({
     if (name.isNotEmpty) {
       commands.add(HabitCreateCommand(name: _clamp(name, 140)));
     }
-  } else if (actionLower.contains(' every day') || actionLower.contains(' daily')) {
-    final name =
-        actionRaw.replaceAll(RegExp(r' every day', caseSensitive: false), '').replaceAll(RegExp(r' daily', caseSensitive: false), '').trim();
-    if (name.isNotEmpty) commands.add(HabitCreateCommand(name: _clamp(name, 140)));
+  } else if (actionLower.contains(' every day') ||
+      actionLower.contains(' daily')) {
+    final name = actionRaw
+        .replaceAll(RegExp(r' every day', caseSensitive: false), '')
+        .replaceAll(RegExp(r' daily', caseSensitive: false), '')
+        .trim();
+    if (name.isNotEmpty) {
+      commands.add(HabitCreateCommand(name: _clamp(name, 140)));
+    }
   }
 
   if (actionLower.startsWith('complete habit ') ||
       actionLower.startsWith('mark habit ')) {
     final name = _stripPrefix(actionRaw, ['complete habit ', 'mark habit ']);
     if (name.isNotEmpty) {
-      commands.add(HabitSetCompletedCommand(name: _clamp(name, 140), completed: true));
+      commands.add(
+          HabitSetCompletedCommand(name: _clamp(name, 140), completed: true));
     }
   } else if (actionLower.startsWith('uncomplete habit ') ||
       actionLower.startsWith('unmark habit ') ||
@@ -129,7 +138,8 @@ AssistantTranslation heuristicTranslate({
       ['uncomplete habit ', 'unmark habit ', 'undo habit '],
     );
     if (name.isNotEmpty) {
-      commands.add(HabitSetCompletedCommand(name: _clamp(name, 140), completed: false));
+      commands.add(
+          HabitSetCompletedCommand(name: _clamp(name, 140), completed: false));
     }
   }
 
@@ -137,7 +147,8 @@ AssistantTranslation heuristicTranslate({
   if (actionLower.startsWith('add task ') ||
       actionLower.startsWith('create task ') ||
       actionLower.startsWith('task ')) {
-    final title = _stripPrefix(actionRaw, ['add task ', 'create task ', 'task ']);
+    final title =
+        _stripPrefix(actionRaw, ['add task ', 'create task ', 'task ']);
     if (title.isNotEmpty) {
       commands.add(TaskCreateCommand(
         title: _clamp(title, 140),
@@ -151,36 +162,55 @@ AssistantTranslation heuristicTranslate({
       actionRaw,
       ['add must win ', 'add must win task', 'add must-win task'],
     ).replaceFirst(RegExp(r'^:\s*'), '');
-    if (title.isNotEmpty) commands.add(TaskCreateCommand(title: _clamp(title, 140), taskType: AssistantTaskType.mustWin));
+    if (title.isNotEmpty) {
+      commands.add(TaskCreateCommand(
+          title: _clamp(title, 140), taskType: AssistantTaskType.mustWin));
+    }
   } else if (actionLower.startsWith('add nice to do ') ||
       actionLower.startsWith('add nice to do task') ||
       actionLower.startsWith('add nice-to-do task')) {
-    final title =
-        _stripPrefix(actionRaw, ['add nice to do ', 'add nice to do task', 'add nice-to-do task']).replaceFirst(RegExp(r'^:\s*'), '');
-    if (title.isNotEmpty) commands.add(TaskCreateCommand(title: _clamp(title, 140), taskType: AssistantTaskType.niceToDo));
+    final title = _stripPrefix(actionRaw, [
+      'add nice to do ',
+      'add nice to do task',
+      'add nice-to-do task'
+    ]).replaceFirst(RegExp(r'^:\s*'), '');
+    if (title.isNotEmpty) {
+      commands.add(TaskCreateCommand(
+          title: _clamp(title, 140), taskType: AssistantTaskType.niceToDo));
+    }
   }
 
-  if (actionLower.startsWith('complete task ') || actionLower.startsWith('mark task ')) {
+  if (actionLower.startsWith('complete task ') ||
+      actionLower.startsWith('mark task ')) {
     final title = _stripPrefix(actionRaw, ['complete task ', 'mark task ']);
-    if (title.isNotEmpty) commands.add(TaskSetCompletedCommand(title: _clamp(title, 140), completed: true));
+    if (title.isNotEmpty) {
+      commands.add(
+          TaskSetCompletedCommand(title: _clamp(title, 140), completed: true));
+    }
   } else if (actionLower.startsWith('uncomplete task ') ||
       actionLower.startsWith('unmark task ') ||
       actionLower.startsWith('undo task ')) {
-    final title = _stripPrefix(actionRaw, ['uncomplete task ', 'unmark task ', 'undo task ']);
-    if (title.isNotEmpty) commands.add(TaskSetCompletedCommand(title: _clamp(title, 140), completed: false));
+    final title = _stripPrefix(
+        actionRaw, ['uncomplete task ', 'unmark task ', 'undo task ']);
+    if (title.isNotEmpty) {
+      commands.add(
+          TaskSetCompletedCommand(title: _clamp(title, 140), completed: false));
+    }
   }
 
-  if (actionLower.startsWith('delete task ') || actionLower.startsWith('remove task ')) {
+  if (actionLower.startsWith('delete task ') ||
+      actionLower.startsWith('remove task ')) {
     final title = _stripPrefix(actionRaw, ['delete task ', 'remove task ']);
-    if (title.isNotEmpty) commands.add(TaskDeleteCommand(title: _clamp(title, 140)));
+    if (title.isNotEmpty) {
+      commands.add(TaskDeleteCommand(title: _clamp(title, 140)));
+    }
   }
 
   final capped = commands.take(5).toList();
-  final hasAction = capped.any((c) => c.kind != 'date.shift' && c.kind != 'date.set');
+  final hasAction =
+      capped.any((c) => c.kind != 'date.shift' && c.kind != 'date.set');
   final say = hasAction
       ? 'Got it.'
       : 'Try: "tomorrow add task ...", "complete task ...", "note: ...", or "add habit ...".';
   return AssistantTranslation(say: say, commands: capped);
 }
-
-

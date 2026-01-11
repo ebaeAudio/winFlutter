@@ -8,5 +8,3 @@ final habitsRepositoryProvider = Provider<HabitsRepository>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
   return LocalHabitsRepository(prefs);
 });
-
-

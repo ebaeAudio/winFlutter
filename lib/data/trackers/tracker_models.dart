@@ -188,5 +188,3 @@ List<TrackerItem> decodeItemsJson(dynamic raw) {
   }
   return const [];
 }
-
-

@@ -121,5 +121,3 @@ class SupabaseTaskDetailsRepository implements TaskDetailsRepository {
     await _client.from('task_subtasks').delete().eq('id', subtaskId);
   }
 }
-
-

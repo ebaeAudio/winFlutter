@@ -12,7 +12,8 @@ import 'package:win_flutter/features/focus/focus_session_controller.dart';
 import 'package:win_flutter/platform/restriction_engine/restriction_engine.dart';
 
 void main() {
-  test('startSession persists active and endSession moves it to history', () async {
+  test('startSession persists active and endSession moves it to history',
+      () async {
     final policies = _MemPolicyRepo();
     final sessions = _MemSessionRepo();
     final engine = _FakeEngine();
@@ -20,7 +21,9 @@ void main() {
     final policy = FocusPolicy(
       id: 'p1',
       name: 'Policy',
-      allowedApps: const [AppIdentifier(platform: AppPlatform.android, id: 'a')],
+      allowedApps: const [
+        AppIdentifier(platform: AppPlatform.android, id: 'a')
+      ],
       friction: FocusFrictionSettings.defaults,
       createdAt: DateTime.now(),
       updatedAt: DateTime.now(),
@@ -149,5 +152,3 @@ class _FakeEngine implements RestrictionEngine {
     started = true;
   }
 }
-
-

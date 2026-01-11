@@ -13,7 +13,12 @@ void main() {
     final created = await repo.create(
       name: 'Water',
       items: const [
-        TrackerItem(key: 'a', emoji: '🥤', description: 'Cup', targetCadence: TargetCadence.daily, targetValue: 8),
+        TrackerItem(
+            key: 'a',
+            emoji: '🥤',
+            description: 'Cup',
+            targetCadence: TargetCadence.daily,
+            targetValue: 8),
       ],
     );
 
@@ -27,7 +32,12 @@ void main() {
       id: created.id,
       name: 'Hydration',
       items: const [
-        TrackerItem(key: 'a', emoji: '🥤', description: 'Cup', targetCadence: TargetCadence.daily, targetValue: 10),
+        TrackerItem(
+            key: 'a',
+            emoji: '🥤',
+            description: 'Cup',
+            targetCadence: TargetCadence.daily,
+            targetValue: 10),
         TrackerItem(key: 'b', emoji: '🚰', description: 'Bottle'),
       ],
     );
@@ -82,5 +92,3 @@ void main() {
     );
   });
 }
-
-

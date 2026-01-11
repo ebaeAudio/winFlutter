@@ -56,5 +56,3 @@ class LocalFocusSessionRepository implements FocusSessionRepository {
     await _prefs.remove(_historyKey);
   }
 }
-
-

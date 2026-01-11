@@ -28,6 +28,7 @@ class TodayTask {
     required this.type,
     required this.completed,
     required this.createdAtMs,
+    this.details,
     this.notes,
     this.nextStep,
     this.estimateMinutes,
@@ -40,6 +41,7 @@ class TodayTask {
   final TodayTaskType type;
   final bool completed;
   final int createdAtMs;
+  final String? details;
   final String? notes;
   final String? nextStep;
   final int? estimateMinutes;
@@ -50,6 +52,7 @@ class TodayTask {
     String? title,
     TodayTaskType? type,
     bool? completed,
+    String? details,
     String? notes,
     String? nextStep,
     int? estimateMinutes,
@@ -62,6 +65,7 @@ class TodayTask {
       type: type ?? this.type,
       completed: completed ?? this.completed,
       createdAtMs: createdAtMs,
+      details: details ?? this.details,
       notes: notes ?? this.notes,
       nextStep: nextStep ?? this.nextStep,
       estimateMinutes: estimateMinutes ?? this.estimateMinutes,
@@ -76,11 +80,13 @@ class TodayTask {
         'type': type.name,
         'completed': completed,
         'createdAtMs': createdAtMs,
+        if (details != null) 'details': details,
         if (notes != null) 'notes': notes,
         if (nextStep != null) 'nextStep': nextStep,
         if (estimateMinutes != null) 'estimateMinutes': estimateMinutes,
         if (actualMinutes != null) 'actualMinutes': actualMinutes,
-        if (subtasks.isNotEmpty) 'subtasks': [for (final s in subtasks) s.toJson()],
+        if (subtasks.isNotEmpty)
+          'subtasks': [for (final s in subtasks) s.toJson()],
       };
 
   static TodayTask fromJson(Map<String, Object?> json) {
@@ -103,6 +109,7 @@ class TodayTask {
           (json['type'] as String?) ?? TodayTaskType.mustWin.name),
       completed: (json['completed'] as bool?) ?? false,
       createdAtMs: (json['createdAtMs'] as num?)?.toInt() ?? 0,
+      details: (json['details'] as String?) ?? (json['notes'] as String?),
       notes: (json['notes'] as String?),
       nextStep: (json['nextStep'] as String?),
       estimateMinutes: (json['estimateMinutes'] as num?)?.toInt(),

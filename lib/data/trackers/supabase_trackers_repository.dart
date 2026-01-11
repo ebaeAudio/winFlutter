@@ -44,10 +44,8 @@ class SupabaseTrackersRepository implements TrackersRepository {
       name: (row['name'] as String?) ?? '',
       items: decodeItemsJson(row['items']),
       archived: (row['archived'] as bool?) ?? false,
-      createdAtMs:
-          DateTime.tryParse(createdAtRaw)?.millisecondsSinceEpoch ?? 0,
-      updatedAtMs:
-          DateTime.tryParse(updatedAtRaw)?.millisecondsSinceEpoch ?? 0,
+      createdAtMs: DateTime.tryParse(createdAtRaw)?.millisecondsSinceEpoch ?? 0,
+      updatedAtMs: DateTime.tryParse(updatedAtRaw)?.millisecondsSinceEpoch ?? 0,
     );
   }
 
@@ -96,8 +94,12 @@ class SupabaseTrackersRepository implements TrackersRepository {
       throw ArgumentError.value(items.length, 'items', 'Must have 1–3 items');
     }
     for (final it in items) {
-      if (it.key.trim().isEmpty) throw ArgumentError('Item key cannot be empty');
-      if (it.emoji.trim().isEmpty) throw ArgumentError('Item emoji cannot be empty');
+      if (it.key.trim().isEmpty) {
+        throw ArgumentError('Item key cannot be empty');
+      }
+      if (it.emoji.trim().isEmpty) {
+        throw ArgumentError('Item emoji cannot be empty');
+      }
       if (it.description.trim().isEmpty) {
         throw ArgumentError('Item description cannot be empty');
       }
@@ -182,5 +184,3 @@ class SupabaseTrackersRepository implements TrackersRepository {
     }
   }
 }
-
-

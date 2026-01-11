@@ -42,5 +42,3 @@ final localTrackerTalliesRepositoryProvider =
   final prefs = ref.watch(sharedPreferencesProvider);
   return LocalTrackerTalliesRepository(prefs);
 });
-
-

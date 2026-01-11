@@ -29,8 +29,8 @@ class _HoldToConfirmButtonState extends State<HoldToConfirmButton> {
     final start = DateTime.now();
     _timer = Timer.periodic(const Duration(milliseconds: 16), (_) async {
       final elapsed = DateTime.now().difference(start);
-      final p =
-          (elapsed.inMilliseconds / widget.holdDuration.inMilliseconds).clamp(0.0, 1.0);
+      final p = (elapsed.inMilliseconds / widget.holdDuration.inMilliseconds)
+          .clamp(0.0, 1.0);
       if (!mounted) return;
       setState(() => _progress = p);
       if (p >= 1.0) {
@@ -79,7 +79,10 @@ class _HoldToConfirmButtonState extends State<HoldToConfirmButton> {
                   child: FractionallySizedBox(
                     widthFactor: _progress,
                     child: Container(
-                      color: Theme.of(context).colorScheme.primary.withOpacity(0.25),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withOpacity(0.25),
                     ),
                   ),
                 ),
@@ -91,5 +94,3 @@ class _HoldToConfirmButtonState extends State<HoldToConfirmButton> {
     );
   }
 }
-
-

@@ -77,5 +77,3 @@ class TaskSubtask {
 
   String get localIdOrId => _fallbackLocalId;
 }
-
-

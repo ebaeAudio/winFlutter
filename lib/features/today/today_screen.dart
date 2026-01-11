@@ -14,6 +14,7 @@ import '../../data/trackers/tracker_models.dart';
 import '../../ui/app_scaffold.dart';
 import '../../ui/components/empty_state_card.dart';
 import '../../ui/components/section_header.dart';
+import '../../ui/components/task_details_sheet.dart';
 import '../../ui/spacing.dart';
 import 'today_controller.dart';
 import 'today_models.dart';
@@ -29,6 +30,7 @@ class TodayScreen extends ConsumerStatefulWidget {
 class _TodayScreenState extends ConsumerState<TodayScreen> {
   DateTime _date = _dateOnly(DateTime.now());
   String? _loadedReflectionForYmd;
+  final Set<String> _expandedTaskIds = {};
   final _quickAddController = TextEditingController();
   final _quickAddFocus = FocusNode();
   var _quickAddType = TodayTaskType.mustWin;
@@ -103,7 +105,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           _assistantSpeechError =
               'Microphone / Speech permission denied. Enable it in Settings and try again.';
         } else if (_speech.isAvailable == false) {
-          _assistantSpeechError = 'Speech recognition is not available on this device.'
+          _assistantSpeechError =
+              'Speech recognition is not available on this device.'
               '${(defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.android) ? ' (Tip: simulators sometimes don’t support this; try a physical device.)' : ''}';
         } else {
           _assistantSpeechError = _assistantSpeechError ?? 'Speech unavailable';
@@ -226,6 +229,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     if (_loadedReflectionForYmd != ymd) {
       _loadedReflectionForYmd = ymd;
       _reflectionController.text = today.reflection;
+      _expandedTaskIds.clear();
     }
 
     final mustWins =
@@ -256,6 +260,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     return AppScaffold(
       title: 'Today',
       actions: [
+        IconButton(
+          tooltip: 'All tasks',
+          onPressed: () => context.go('/tasks'),
+          icon: const Icon(Icons.view_list),
+        ),
         IconButton(
           tooltip: 'Pick date',
           onPressed: _pickDate,
@@ -385,7 +394,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.send),
                         label: Text(_assistantLoading ? 'Working…' : 'Run'),
@@ -404,7 +414,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           style: Theme.of(context)
                               .textTheme
                               .bodySmall
-                              ?.copyWith(color: Theme.of(context).colorScheme.error),
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.error),
                         ),
                       ],
                       Gap.h8,
@@ -435,7 +446,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                     if (!inRing) {
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Hold the outline to talk')),
+                        const SnackBar(
+                            content: Text('Hold the outline to talk')),
                       );
                       return;
                     }
@@ -661,8 +673,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                         child: const Text('Cancel')),
                     FilledButton(
                         onPressed: () async {
-                          final ok =
-                              await controller.addHabit(name: _habitAddController.text);
+                          final ok = await controller.addHabit(
+                              name: _habitAddController.text);
                           if (!context.mounted) return;
                           Navigator.of(context).pop();
                           if (ok) {
@@ -748,7 +760,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             description:
                 'Create a custom tracker (3 items) and tap here to tally quickly.',
             ctaLabel: 'Add tracker',
-            onCtaPressed: () => context.go('/home/settings/trackers'),
+            onCtaPressed: () => context.go('/settings/trackers'),
           )
         else
           Column(
@@ -776,7 +788,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                 .titleMedium
                                 ?.copyWith(fontWeight: FontWeight.w800),
                           ),
-                          subtitle: const Text('Tap to add. Long-press to undo.'),
+                          subtitle:
+                              const Text('Tap to add. Long-press to undo.'),
                         ),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(
@@ -857,7 +870,13 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 id: id, current: current, onSave: controller.updateTaskTitle),
             onDelete: (id) => controller.deleteTask(id),
             onMove: (id) => controller.moveTaskType(id, TodayTaskType.niceToDo),
-            onDetails: (id) => context.push('/home/today/task/$id?ymd=$ymd'),
+            expandedTaskIds: _expandedTaskIds,
+            onToggleExpanded: _toggleExpandedTask,
+            onEditDetails: (t) => _openTaskDetailsSheet(
+              context,
+              controller: controller,
+              task: t,
+            ),
           ),
         Gap.h16,
         SectionHeader(
@@ -885,7 +904,13 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 id: id, current: current, onSave: controller.updateTaskTitle),
             onDelete: (id) => controller.deleteTask(id),
             onMove: (id) => controller.moveTaskType(id, TodayTaskType.mustWin),
-            onDetails: (id) => context.push('/home/today/task/$id?ymd=$ymd'),
+            expandedTaskIds: _expandedTaskIds,
+            onToggleExpanded: _toggleExpandedTask,
+            onEditDetails: (t) => _openTaskDetailsSheet(
+              context,
+              controller: controller,
+              task: t,
+            ),
           ),
         Gap.h16,
         const SectionHeader(title: 'Reflection'),
@@ -1079,6 +1104,42 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     if (saved != true) return;
     await onSave(id, controller.text);
   }
+
+  void _toggleExpandedTask(String taskId) {
+    setState(() {
+      if (_expandedTaskIds.contains(taskId)) {
+        _expandedTaskIds.remove(taskId);
+      } else {
+        _expandedTaskIds.add(taskId);
+      }
+    });
+  }
+
+  Future<void> _openTaskDetailsSheet(
+    BuildContext context, {
+    required TodayController controller,
+    required TodayTask task,
+  }) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => TaskDetailsSheet(
+        title: task.title,
+        initialDetails: task.details ?? '',
+        maxLength: TodayController.maxTaskDetailsChars,
+        onSave: (next) => controller.updateTaskDetailsText(
+          taskId: task.id,
+          details: next,
+        ),
+      ),
+    );
+    if (saved == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saved')),
+      );
+    }
+  }
 }
 
 class _TasksCard extends StatelessWidget {
@@ -1088,7 +1149,9 @@ class _TasksCard extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onMove,
-    required this.onDetails,
+    required this.expandedTaskIds,
+    required this.onToggleExpanded,
+    required this.onEditDetails,
   });
 
   final List<TodayTask> tasks;
@@ -1096,7 +1159,9 @@ class _TasksCard extends StatelessWidget {
   final Future<void> Function(String taskId, String currentTitle) onEdit;
   final Future<void> Function(String taskId) onDelete;
   final Future<void> Function(String taskId) onMove;
-  final void Function(String taskId) onDetails;
+  final Set<String> expandedTaskIds;
+  final void Function(String taskId) onToggleExpanded;
+  final void Function(TodayTask task) onEditDetails;
 
   @override
   Widget build(BuildContext context) {
@@ -1106,63 +1171,159 @@ class _TasksCard extends StatelessWidget {
         child: Column(
           children: [
             for (final t in tasks)
-              GestureDetector(
-                onDoubleTap: () => onDetails(t.id),
-                behavior: HitTestBehavior.opaque,
-                child: ListTile(
-                  leading: Checkbox(
-                    value: t.completed,
-                    onChanged: (_) => onToggle(t.id),
-                  ),
-                  title: Text(
-                    t.title,
-                    style: t.completed
-                        ? Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              decoration: TextDecoration.lineThrough,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurface
-                                  .withOpacity(0.6),
-                            )
-                        : Theme.of(context).textTheme.bodyLarge,
-                  ),
-                  trailing: PopupMenuButton<String>(
-                    onSelected: (value) async {
-                      switch (value) {
-                        case 'details':
-                          onDetails(t.id);
-                          break;
-                        case 'edit':
-                          await onEdit(t.id, t.title);
-                          break;
-                        case 'move':
-                          await onMove(t.id);
-                          break;
-                        case 'delete':
-                          await onDelete(t.id);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Deleted')),
-                            );
-                          }
-                          break;
-                      }
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(value: 'details', child: Text('Details')),
-                      PopupMenuDivider(),
-                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      PopupMenuItem(
-                          value: 'move', child: Text('Move to other list')),
-                      PopupMenuDivider(),
-                      PopupMenuItem(value: 'delete', child: Text('Delete')),
-                    ],
-                  ),
-                ),
+              _TaskRow(
+                task: t,
+                expanded: expandedTaskIds.contains(t.id),
+                onToggle: onToggle,
+                onEdit: onEdit,
+                onDelete: onDelete,
+                onMove: onMove,
+                onToggleExpanded: onToggleExpanded,
+                onEditDetails: onEditDetails,
               ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _TaskRow extends StatelessWidget {
+  const _TaskRow({
+    required this.task,
+    required this.expanded,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onMove,
+    required this.onToggleExpanded,
+    required this.onEditDetails,
+  });
+
+  final TodayTask task;
+  final bool expanded;
+  final Future<void> Function(String taskId) onToggle;
+  final Future<void> Function(String taskId, String currentTitle) onEdit;
+  final Future<void> Function(String taskId) onDelete;
+  final Future<void> Function(String taskId) onMove;
+  final void Function(String taskId) onToggleExpanded;
+  final void Function(TodayTask task) onEditDetails;
+
+  bool get _hasDetails => (task.details ?? '').trim().isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final noteColor = _hasDetails
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurfaceVariant;
+
+    return Column(
+      children: [
+        GestureDetector(
+          onDoubleTap: () => onEditDetails(task),
+          behavior: HitTestBehavior.opaque,
+          child: ListTile(
+            leading: Checkbox(
+              value: task.completed,
+              onChanged: (_) => onToggle(task.id),
+            ),
+            title: Text(
+              task.title,
+              style: task.completed
+                  ? theme.textTheme.bodyLarge?.copyWith(
+                      decoration: TextDecoration.lineThrough,
+                      color: theme.colorScheme.onSurface.withOpacity(0.6),
+                    )
+                  : theme.textTheme.bodyLarge,
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onLongPress: () => onEditDetails(task),
+                  child: IconButton(
+                    tooltip: _hasDetails ? 'Show note' : 'Add note',
+                    icon: Icon(
+                      _hasDetails
+                          ? Icons.sticky_note_2
+                          : Icons.sticky_note_2_outlined,
+                      color: noteColor,
+                    ),
+                    onPressed: _hasDetails
+                        ? () => onToggleExpanded(task.id)
+                        : () => onEditDetails(task),
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (value) async {
+                    switch (value) {
+                      case 'details':
+                        onEditDetails(task);
+                        break;
+                      case 'edit':
+                        await onEdit(task.id, task.title);
+                        break;
+                      case 'move':
+                        await onMove(task.id);
+                        break;
+                      case 'delete':
+                        await onDelete(task.id);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Deleted')),
+                          );
+                        }
+                        break;
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'details', child: Text('Details')),
+                    PopupMenuDivider(),
+                    PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    PopupMenuItem(
+                        value: 'move', child: Text('Move to other list')),
+                    PopupMenuDivider(),
+                    PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (expanded && _hasDetails)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpace.s16, 0, AppSpace.s16, AppSpace.s12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  task.details!.trim(),
+                  maxLines: 6,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                Gap.h8,
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => onEditDetails(task),
+                      child: const Text('Edit note'),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => onToggleExpanded(task.id),
+                      child: const Text('Hide'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

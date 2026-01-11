@@ -47,5 +47,3 @@ class LocalFocusPolicyRepository implements FocusPolicyRepository {
     await _prefs.setString(_policiesKey, FocusPolicy.listToJsonString(updated));
   }
 }
-
-

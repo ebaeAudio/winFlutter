@@ -43,5 +43,3 @@ void main() {
     expect(decoded.single.isActive, true);
   });
 }
-
-

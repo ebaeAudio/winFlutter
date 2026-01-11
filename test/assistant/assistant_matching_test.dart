@@ -47,12 +47,15 @@ void main() {
 
     test('habit matching works the same way', () {
       final habits = [
-        const TodayHabit(id: 'h1', name: 'Workout', completed: false, createdAtMs: 0),
-        const TodayHabit(id: 'h2', name: 'Workout (short)', completed: false, createdAtMs: 0),
+        const TodayHabit(
+            id: 'h1', name: 'Workout', completed: false, createdAtMs: 0),
+        const TodayHabit(
+            id: 'h2',
+            name: 'Workout (short)',
+            completed: false,
+            createdAtMs: 0),
       ];
       expect(matchHabitIdByName(habits, 'workout'), 'h1');
     });
   });
 }
-
-

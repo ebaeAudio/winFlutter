@@ -17,5 +17,3 @@ final taskDetailsRepositoryProvider = Provider<TaskDetailsRepository?>((ref) {
   // this with retry and a graceful empty-details fallback.
   return SupabaseTaskDetailsRepository(Supabase.instance.client);
 });
-
-

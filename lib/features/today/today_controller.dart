@@ -79,6 +79,7 @@ class TodayController extends StateNotifier<TodayDayData> {
       title: t.title,
       type: type,
       completed: t.completed,
+      details: t.details,
       createdAtMs: t.createdAt.millisecondsSinceEpoch,
     );
   }
@@ -277,6 +278,38 @@ class TodayController extends StateNotifier<TodayDayData> {
     final nextTasks = [
       for (final t in state.tasks)
         if (t.id == taskId) t.copyWith(title: trimmed) else t
+    ];
+    await _saveLocalDay(state.copyWith(tasks: nextTasks));
+  }
+
+  static const int maxTaskDetailsChars = 2000;
+
+  Future<void> updateTaskDetailsText({
+    required String taskId,
+    required String details,
+  }) async {
+    final trimmed = details.trim();
+    if (trimmed.length > maxTaskDetailsChars) {
+      throw const FormatException('Details must be $maxTaskDetailsChars characters or less.');
+    }
+    final next = trimmed.isEmpty ? null : trimmed;
+
+    if (_isSupabaseMode) {
+      final updated = await _tasksRepository!.update(
+        id: taskId,
+        details: trimmed,
+      );
+      final nextTasks = [
+        for (final t in state.tasks)
+          if (t.id == taskId) _toTodayTask(updated) else t,
+      ];
+      state = state.copyWith(tasks: nextTasks);
+      return;
+    }
+
+    final nextTasks = [
+      for (final t in state.tasks)
+        if (t.id == taskId) t.copyWith(details: next) else t
     ];
     await _saveLocalDay(state.copyWith(tasks: nextTasks));
   }

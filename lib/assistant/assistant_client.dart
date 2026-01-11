@@ -45,5 +45,3 @@ class AssistantClient {
     return heuristicTranslate(transcript: trimmed, baseDateYmd: baseDateYmd);
   }
 }
-
-

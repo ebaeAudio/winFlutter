@@ -18,12 +18,13 @@ class FocusPoliciesScreen extends ConsumerWidget {
         IconButton(
           tooltip: 'Create',
           onPressed: () async {
-            final created =
-                await ref.read(focusPolicyListProvider.notifier).createDefault();
+            final created = await ref
+                .read(focusPolicyListProvider.notifier)
+                .createDefault();
             if (!context.mounted) return;
             // `closeOnSave=1` makes the editor navigate back to the list after the
             // first successful save in the "new policy" flow.
-            context.go('/home/focus/policies/edit/${created.id}?closeOnSave=1');
+            context.go('/focus/policies/edit/${created.id}?closeOnSave=1');
           },
           icon: const Icon(Icons.add),
         ),
@@ -66,7 +67,8 @@ class FocusPoliciesScreen extends ConsumerWidget {
                                   content: Text('“${p.name}” will be removed.'),
                                   actions: [
                                     TextButton(
-                                      onPressed: () => Navigator.pop(ctx, false),
+                                      onPressed: () =>
+                                          Navigator.pop(ctx, false),
                                       child: const Text('Cancel'),
                                     ),
                                     FilledButton(
@@ -81,8 +83,7 @@ class FocusPoliciesScreen extends ConsumerWidget {
                           await controller.delete(p.id);
                         },
                       ),
-                      onTap: () =>
-                          context.go('/home/focus/policies/edit/${p.id}'),
+                      onTap: () => context.go('/focus/policies/edit/${p.id}'),
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -95,5 +96,3 @@ class FocusPoliciesScreen extends ConsumerWidget {
     );
   }
 }
-
-

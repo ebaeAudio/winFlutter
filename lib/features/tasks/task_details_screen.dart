@@ -79,8 +79,9 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
       // Always try to seed from Today state if available (fast).
       if (_hasYmd) {
         final today = ref.read(todayControllerProvider(widget.ymd));
-        final match =
-            today.tasks.where((t) => t.id == widget.taskId).toList(growable: false);
+        final match = today.tasks
+            .where((t) => t.id == widget.taskId)
+            .toList(growable: false);
         if (match.isNotEmpty) {
           _seedFromTodayTask(match.first);
         }
@@ -95,8 +96,9 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
         // Local/demo mode: details are stored on the Today task itself.
         if (_hasYmd) {
           final today = ref.read(todayControllerProvider(widget.ymd));
-          final match =
-              today.tasks.where((t) => t.id == widget.taskId).toList(growable: false);
+          final match = today.tasks
+              .where((t) => t.id == widget.taskId)
+              .toList(growable: false);
           if (match.isNotEmpty) _seedFromTodayTask(match.first);
         }
       }
@@ -112,7 +114,8 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
     }
   }
 
-  void _seedFromRepo({required TaskDetails details, required List<TaskSubtask> subtasks}) {
+  void _seedFromRepo(
+      {required TaskDetails details, required List<TaskSubtask> subtasks}) {
     _notes = details.notes ?? '';
     _nextStep = details.nextStep ?? '';
     _estimateMinutes = details.estimateMinutes;
@@ -184,7 +187,9 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
       } else {
         // Local/demo mode
         if (!_hasYmd) throw StateError('Missing ymd in local mode');
-        await ref.read(todayControllerProvider(widget.ymd).notifier).updateTaskDetails(
+        await ref
+            .read(todayControllerProvider(widget.ymd).notifier)
+            .updateTaskDetails(
               taskId: widget.taskId,
               notes: nextNotes,
               nextStep: nextNextStep,
@@ -220,7 +225,8 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
     final repo = ref.read(taskDetailsRepositoryProvider);
     try {
       if (repo != null) {
-        final created = await repo.createSubtask(taskId: widget.taskId, title: title);
+        final created =
+            await repo.createSubtask(taskId: widget.taskId, title: title);
         if (!mounted) return;
         setState(() {
           _subtasks = [..._subtasks, created];
@@ -236,8 +242,9 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
 
       // Refresh local from Today state.
       final today = ref.read(todayControllerProvider(widget.ymd));
-      final match =
-          today.tasks.where((t) => t.id == widget.taskId).toList(growable: false);
+      final match = today.tasks
+          .where((t) => t.id == widget.taskId)
+          .toList(growable: false);
       if (!mounted) return;
       if (match.isNotEmpty) {
         setState(() {
@@ -262,7 +269,8 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
         if (!mounted) return;
         setState(() {
           _subtasks = [
-            for (final x in _subtasks) if (x.id == s.id) updated else x,
+            for (final x in _subtasks)
+              if (x.id == s.id) updated else x,
           ];
         });
         return;
@@ -278,8 +286,9 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
           );
 
       final today = ref.read(todayControllerProvider(widget.ymd));
-      final match =
-          today.tasks.where((t) => t.id == widget.taskId).toList(growable: false);
+      final match = today.tasks
+          .where((t) => t.id == widget.taskId)
+          .toList(growable: false);
       if (!mounted) return;
       if (match.isNotEmpty) {
         setState(() => _seedFromTodayTask(match.first));
@@ -296,7 +305,8 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
       if (repo != null) {
         await repo.deleteSubtask(subtaskId: s.id);
         if (!mounted) return;
-        setState(() => _subtasks = _subtasks.where((x) => x.id != s.id).toList());
+        setState(
+            () => _subtasks = _subtasks.where((x) => x.id != s.id).toList());
         return;
       }
 
@@ -306,8 +316,9 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
           .deleteSubtask(taskId: widget.taskId, subtaskId: s.localIdOrId);
 
       final today = ref.read(todayControllerProvider(widget.ymd));
-      final match =
-          today.tasks.where((t) => t.id == widget.taskId).toList(growable: false);
+      final match = today.tasks
+          .where((t) => t.id == widget.taskId)
+          .toList(growable: false);
       if (!mounted) return;
       if (match.isNotEmpty) {
         setState(() => _seedFromTodayTask(match.first));
@@ -322,7 +333,8 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
   Widget build(BuildContext context) {
     final ymd = widget.ymd.trim();
     final today = ymd.isEmpty ? null : ref.watch(todayControllerProvider(ymd));
-    final task = today?.tasks.where((t) => t.id == widget.taskId).toList().firstOrNull;
+    final task =
+        today?.tasks.where((t) => t.id == widget.taskId).toList().firstOrNull;
 
     final title = task?.title ?? _titleController.text;
 
@@ -356,7 +368,8 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_loadError!, style: Theme.of(context).textTheme.bodyLarge),
+                  Text(_loadError!,
+                      style: Theme.of(context).textTheme.bodyLarge),
                   Gap.h12,
                   FilledButton.icon(
                     onPressed: _load,
@@ -399,9 +412,11 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                         SegmentedButton<TodayTaskType>(
                           segments: const [
                             ButtonSegment(
-                                value: TodayTaskType.mustWin, label: Text('Must‑Win')),
+                                value: TodayTaskType.mustWin,
+                                label: Text('Must‑Win')),
                             ButtonSegment(
-                                value: TodayTaskType.niceToDo, label: Text('Nice‑to‑Do')),
+                                value: TodayTaskType.niceToDo,
+                                label: Text('Nice‑to‑Do')),
                           ],
                           selected: {task.type},
                           onSelectionChanged: (s) => ref
@@ -539,23 +554,22 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                       'No subtasks yet.',
                       style: Theme.of(context).textTheme.bodySmall,
                     )
-                  else
-                    ...[
-                      for (final s in _subtasks)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Checkbox(
-                            value: s.completed,
-                            onChanged: (_) => _toggleSubtask(s),
-                          ),
-                          title: Text(s.title),
-                          trailing: IconButton(
-                            tooltip: 'Delete',
-                            onPressed: () => _deleteSubtask(s),
-                            icon: const Icon(Icons.delete_outline),
-                          ),
+                  else ...[
+                    for (final s in _subtasks)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Checkbox(
+                          value: s.completed,
+                          onChanged: (_) => _toggleSubtask(s),
                         ),
-                    ],
+                        title: Text(s.title),
+                        trailing: IconButton(
+                          tooltip: 'Delete',
+                          onPressed: () => _deleteSubtask(s),
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ),
+                  ],
                 ],
               ),
             ),
@@ -569,5 +583,3 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
 extension<T> on List<T> {
   T? get firstOrNull => isEmpty ? null : first;
 }
-
-

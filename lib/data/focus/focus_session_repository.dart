@@ -9,5 +9,3 @@ abstract class FocusSessionRepository {
   Future<void> appendToHistory(FocusSession session);
   Future<void> clearHistory();
 }
-
-

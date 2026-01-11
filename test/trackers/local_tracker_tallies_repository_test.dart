@@ -14,27 +14,34 @@ void main() {
     const itemKey = 'a';
 
     expect(
-      await repo.applyDelta(ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: 1),
+      await repo.applyDelta(
+          ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: 1),
       1,
     );
     expect(
-      await repo.applyDelta(ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: 1),
+      await repo.applyDelta(
+          ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: 1),
       2,
     );
     expect(
-      await repo.applyDelta(ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: -5),
+      await repo.applyDelta(
+          ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: -5),
       0,
     );
   });
 
-  test('LocalTrackerTalliesRepository: listForDate and listForDateRange', () async {
+  test('LocalTrackerTalliesRepository: listForDate and listForDateRange',
+      () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final repo = LocalTrackerTalliesRepository(prefs);
 
-    await repo.applyDelta(ymd: '2026-01-01', trackerId: 't1', itemKey: 'a', delta: 2);
-    await repo.applyDelta(ymd: '2026-01-02', trackerId: 't1', itemKey: 'a', delta: 3);
-    await repo.applyDelta(ymd: '2026-01-02', trackerId: 't2', itemKey: 'b', delta: 4);
+    await repo.applyDelta(
+        ymd: '2026-01-01', trackerId: 't1', itemKey: 'a', delta: 2);
+    await repo.applyDelta(
+        ymd: '2026-01-02', trackerId: 't1', itemKey: 'a', delta: 3);
+    await repo.applyDelta(
+        ymd: '2026-01-02', trackerId: 't2', itemKey: 'b', delta: 4);
 
     final day = await repo.listForDate(ymd: '2026-01-02');
     expect(day.length, 2);
@@ -50,5 +57,3 @@ void main() {
     expect(sum, 5);
   });
 }
-
-

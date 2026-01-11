@@ -17,5 +17,3 @@ abstract interface class TrackersRepository {
     bool? archived,
   });
 }
-
-

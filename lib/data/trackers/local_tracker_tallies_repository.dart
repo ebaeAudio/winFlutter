@@ -117,5 +117,3 @@ class LocalTrackerTalliesRepository implements TrackerTalliesRepository {
     return '$y-$m-$d';
   }
 }
-
-

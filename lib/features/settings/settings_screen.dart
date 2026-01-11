@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../app/auth.dart';
 import '../../app/env.dart';
+import '../../app/errors.dart';
+import '../../app/supabase.dart';
 import '../../app/theme.dart';
 import '../../ui/app_scaffold.dart';
 import '../../ui/components/section_header.dart';
@@ -12,11 +15,54 @@ import '../../ui/spacing.dart';
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
+  Future<void> _confirmAndSignOut(
+    BuildContext context, {
+    required bool enabled,
+    required SupabaseClient? client,
+  }) async {
+    if (!enabled || client == null) return;
+
+    final shouldSignOut = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('You’ll be signed out on this device.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+    if (shouldSignOut != true) return;
+
+    try {
+      await client.auth.signOut();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Signed out.')),
+      );
+      context.go('/auth');
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyError(e))),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authStateProvider).valueOrNull;
     final env = ref.watch(envProvider);
     final themeSettings = ref.watch(themeControllerProvider);
+    final supabase = ref.watch(supabaseProvider);
+    final client = supabase.client;
 
     return AppScaffold(
       title: 'Settings',
@@ -32,6 +78,17 @@ class SettingsScreen extends ConsumerWidget {
                   subtitle: Text(auth?.email ??
                       (auth?.isDemo == true ? 'demo@local' : '—')),
                 ),
+                if (auth?.isDemo != true && client != null)
+                  ListTile(
+                    leading: const Icon(Icons.logout),
+                    title: const Text('Log out'),
+                    subtitle: const Text('Sign out on this device'),
+                    onTap: () => _confirmAndSignOut(
+                      context,
+                      enabled: auth?.isDemo != true,
+                      client: client,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -48,7 +105,7 @@ class SettingsScreen extends ConsumerWidget {
                   title: const Text('Custom trackers'),
                   subtitle: const Text('Add quick tallies to Today'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => context.go('/home/settings/trackers'),
+                  onTap: () => context.go('/settings/trackers'),
                 ),
               ],
             ),

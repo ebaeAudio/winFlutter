@@ -19,8 +19,10 @@ final focusSessionHistoryProvider =
 );
 
 class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
-  FocusSessionRepository get _sessions => ref.read(focusSessionRepositoryProvider);
-  FocusPolicyRepository get _policies => ref.read(focusPolicyRepositoryProvider);
+  FocusSessionRepository get _sessions =>
+      ref.read(focusSessionRepositoryProvider);
+  FocusPolicyRepository get _policies =>
+      ref.read(focusPolicyRepositoryProvider);
   RestrictionEngine get _engine => ref.read(restrictionEngineProvider);
 
   @override
@@ -144,5 +146,3 @@ class FocusSessionHistoryController extends AsyncNotifier<List<FocusSession>> {
     });
   }
 }
-
-

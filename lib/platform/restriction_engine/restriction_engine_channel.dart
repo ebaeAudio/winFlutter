@@ -66,7 +66,8 @@ class MethodChannelRestrictionEngine implements RestrictionEngine {
     try {
       await _channel.invokeMethod<void>('startSession', {
         'endsAtMillis': endsAt.millisecondsSinceEpoch,
-        'allowedApps': allowedApps.map((a) => a.toJson()).toList(growable: false),
+        'allowedApps':
+            allowedApps.map((a) => a.toJson()).toList(growable: false),
         'friction': friction.toJson(),
       });
     } on MissingPluginException {
@@ -94,5 +95,3 @@ class MethodChannelRestrictionEngine implements RestrictionEngine {
     }
   }
 }
-
-
