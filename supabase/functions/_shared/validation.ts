@@ -9,8 +9,63 @@ export function clampString(raw: unknown, maxLen: number): string {
   return trimmed.slice(0, maxLen);
 }
 
+/**
+ * Basic sanitization: strip ASCII control chars except tab/newline/carriage return.
+ * This helps avoid log injection / hidden characters while preserving natural language.
+ */
+export function stripUnsafeControlChars(raw: string): string {
+  let out = "";
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw.charCodeAt(i);
+    const isAllowed =
+      c === 0x09 || // \t
+      c === 0x0a || // \n
+      c === 0x0d || // \r
+      (c >= 0x20 && c !== 0x7f);
+    if (isAllowed) out += raw[i];
+  }
+  return out;
+}
+
 export function isYmd(raw: unknown): raw is string {
   return typeof raw === "string" && YMD_RE.test(raw.trim());
+}
+
+export type AssistantRequest = {
+  transcript: string;
+  baseDateYmd: string;
+};
+
+/**
+ * Strict, schema-based parsing for assistant request bodies.
+ *
+ * OWASP alignment:
+ * - Validate inputs at the boundary (type checks, length limits).
+ * - Reject unexpected fields (avoid "mass assignment" / surprising behavior).
+ */
+export function parseAssistantRequestBodyStrict(raw: unknown, opts: {
+  maxTranscriptChars: number;
+}): { ok: true; value: AssistantRequest } | { ok: false; error: string } {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ok: false, error: "Body must be a JSON object" };
+  }
+
+  const obj = raw as Record<string, unknown>;
+  const allowedKeys = new Set(["transcript", "baseDateYmd"]);
+  for (const k of Object.keys(obj)) {
+    if (!allowedKeys.has(k)) return { ok: false, error: `Unexpected field: ${k}` };
+  }
+
+  const transcriptRaw = typeof obj["transcript"] === "string" ? obj["transcript"] : "";
+  const baseDateRaw = typeof obj["baseDateYmd"] === "string" ? obj["baseDateYmd"] : "";
+
+  const transcript = clampString(stripUnsafeControlChars(transcriptRaw), opts.maxTranscriptChars);
+  const baseDateYmd = clampString(stripUnsafeControlChars(baseDateRaw), 10);
+
+  if (!transcript) return { ok: false, error: "transcript required" };
+  if (!isYmd(baseDateYmd)) return { ok: false, error: "baseDateYmd required (YYYY-MM-DD)" };
+
+  return { ok: true, value: { transcript, baseDateYmd } };
 }
 
 function asBool(raw: unknown): boolean | null {

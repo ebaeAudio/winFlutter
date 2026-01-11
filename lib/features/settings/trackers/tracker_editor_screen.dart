@@ -37,16 +37,28 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    for (final c in _emojiControllers) c.dispose();
-    for (final c in _descControllers) c.dispose();
-    for (final c in _targetControllers) c.dispose();
+    for (final c in _emojiControllers) {
+      c.dispose();
+    }
+    for (final c in _descControllers) {
+      c.dispose();
+    }
+    for (final c in _targetControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
   void _resetItemControllers() {
-    for (final c in _emojiControllers) c.dispose();
-    for (final c in _descControllers) c.dispose();
-    for (final c in _targetControllers) c.dispose();
+    for (final c in _emojiControllers) {
+      c.dispose();
+    }
+    for (final c in _descControllers) {
+      c.dispose();
+    }
+    for (final c in _targetControllers) {
+      c.dispose();
+    }
     _emojiControllers.clear();
     _descControllers.clear();
     _targetControllers.clear();
@@ -104,12 +116,12 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
     }
 
     if (!_isNew && tracker == null) {
-      return AppScaffold(
+      return const AppScaffold(
         title: 'Tracker',
         children: [
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(AppSpace.s12),
+              padding: EdgeInsets.all(AppSpace.s12),
               child: Text('Tracker not found.'),
             ),
           ),

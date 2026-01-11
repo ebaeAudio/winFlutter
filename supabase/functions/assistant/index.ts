@@ -15,7 +15,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import type { AssistantResponse } from "../_shared/assistant_schema.ts";
 import { heuristicTranslate } from "../_shared/heuristics.ts";
 import { checkRateLimit } from "../_shared/rate_limit.ts";
-import { clampString, isYmd, validateAssistantResponse } from "../_shared/validation.ts";
+import { parseAssistantRequestBodyStrict, validateAssistantResponse } from "../_shared/validation.ts";
 
 function jsonResponse(status: number, body: unknown, headers?: HeadersInit): Response {
   return new Response(JSON.stringify(body), {
@@ -42,6 +42,28 @@ function parseAllowedOrigins(raw: string): Set<string> {
     if (o) set.add(o);
   }
   return set;
+}
+
+function getClientIp(req: Request): string {
+  // Prefer proxy-provided headers. On Supabase Edge Functions, `x-forwarded-for` is typical.
+  const xff = req.headers.get("x-forwarded-for") ?? "";
+  const first = xff.split(",")[0]?.trim();
+  const direct = req.headers.get("cf-connecting-ip") ?? req.headers.get("x-real-ip") ?? "";
+  const ip = (first || direct).trim();
+  // Keep keys bounded (avoid unbounded memory/row growth on weird inputs).
+  return ip.length > 0 && ip.length <= 80 ? ip : "unknown";
+}
+
+function buildCorsHeaders(origin: string | null, allowedOrigins: Set<string>): HeadersInit {
+  if (!origin) return {};
+  if (allowedOrigins.size > 0 && !allowedOrigins.has(origin)) return {};
+  return {
+    "Access-Control-Allow-Origin": origin,
+    "Vary": "Origin",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization, content-type",
+    "Access-Control-Max-Age": "86400",
+  };
 }
 
 function buildOpenAiPrompt(args: { transcript: string; baseDateYmd: string }): string {
@@ -119,26 +141,61 @@ async function callOpenAi(opts: {
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method !== "POST") {
-    return jsonResponse(405, { error: "Method not allowed" }, { "Allow": "POST" });
-  }
-
   const allowedOrigins = parseAllowedOrigins(getEnv("ASSISTANT_ALLOWED_ORIGINS", ""));
   const origin = req.headers.get("Origin");
   if (origin && allowedOrigins.size > 0 && !allowedOrigins.has(origin)) {
     return jsonResponse(403, { error: "Origin not allowed" });
+  }
+  const corsHeaders = buildCorsHeaders(origin, allowedOrigins);
+
+  if (req.method === "OPTIONS") {
+    // CORS preflight; never execute handler logic.
+    return new Response(null, { status: 204, headers: corsHeaders });
+  }
+  if (req.method !== "POST") {
+    return jsonResponse(405, { error: "Method not allowed" }, { "Allow": "POST", ...corsHeaders });
   }
 
   const supabaseUrl = getEnv("SUPABASE_URL");
   const supabaseAnonKey = getEnv("SUPABASE_ANON_KEY");
   if (!supabaseUrl || !supabaseAnonKey) {
     // Function isn't configured; for safety we still require auth header, but can't validate.
-    return jsonResponse(500, { error: "Supabase env not configured for function" });
+    return jsonResponse(500, { error: "Supabase env not configured for function" }, corsHeaders);
   }
 
   const authHeader = req.headers.get("Authorization") ?? "";
   if (!authHeader.toLowerCase().startsWith("bearer ")) {
-    return jsonResponse(401, { error: "Missing Authorization" });
+    return jsonResponse(401, { error: "Missing Authorization" }, corsHeaders);
+  }
+
+  // Prefer durable rate limiting using the service role key (server-side only).
+  // If not configured, we fall back to a best-effort in-memory limiter to avoid breaking functionality.
+  const serviceRoleKey = getEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const supabaseAdmin = serviceRoleKey
+    ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
+    : null;
+
+  // Apply an IP-based limiter early to protect availability before any expensive work.
+  const ip = getClientIp(req);
+  const ipRpm = Number(getEnv("ASSISTANT_IP_RPM", "60")) || 60;
+  const ipRl = await checkRateLimit({
+    client: supabaseAdmin ?? undefined,
+    key: `assistant:ip:${ip}`,
+    windowSeconds: 60,
+    maxRequests: ipRpm,
+  });
+  if (!ipRl.ok) {
+    return jsonResponse(
+      429,
+      { error: "Rate limit exceeded" },
+      {
+        "Retry-After": String(ipRl.retryAfterSeconds),
+        "X-RateLimit-Limit": String(ipRl.limit),
+        "X-RateLimit-Remaining": String(ipRl.remaining),
+        "X-RateLimit-Reset": String(ipRl.resetSeconds),
+        ...corsHeaders,
+      },
+    );
   }
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -148,28 +205,51 @@ Deno.serve(async (req: Request) => {
 
   const userRes = await supabase.auth.getUser().catch(() => null);
   const userId = userRes?.data?.user?.id;
-  if (!userId) return jsonResponse(401, { error: "Unauthorized" });
+  if (!userId) return jsonResponse(401, { error: "Unauthorized" }, corsHeaders);
 
-  const rpm = Number(getEnv("ASSISTANT_RPM", "20")) || 20;
-  const rl = checkRateLimit({ key: `assistant:${userId}`, rpm });
-  if (!rl.ok) {
-    return jsonResponse(429, { error: "Rate limit exceeded" }, { "Retry-After": String(rl.retryAfterSeconds) });
+  // Per-user limit (primary limiter). We keep the existing default RPM=20.
+  const userRpm = Number(getEnv("ASSISTANT_RPM", "20")) || 20;
+  const userRl = await checkRateLimit({
+    client: supabaseAdmin ?? undefined,
+    key: `assistant:user:${userId}`,
+    windowSeconds: 60,
+    maxRequests: userRpm,
+  });
+  if (!userRl.ok) {
+    return jsonResponse(
+      429,
+      { error: "Rate limit exceeded" },
+      {
+        "Retry-After": String(userRl.retryAfterSeconds),
+        "X-RateLimit-Limit": String(userRl.limit),
+        "X-RateLimit-Remaining": String(userRl.remaining),
+        "X-RateLimit-Reset": String(userRl.resetSeconds),
+        ...corsHeaders,
+      },
+    );
   }
 
   const maxTranscriptChars = Number(getEnv("ASSISTANT_MAX_TRANSCRIPT_CHARS", "2000")) || 2000;
+  const maxBodyBytes = Number(getEnv("ASSISTANT_MAX_BODY_BYTES", "20000")) || 20000;
   const debugEnabled = getEnv("ASSISTANT_DEBUG", "false").toLowerCase().trim() === "true";
+
+  const contentLength = Number(req.headers.get("content-length") ?? "0") || 0;
+  if (contentLength > maxBodyBytes) {
+    return jsonResponse(413, { error: "Request too large" }, corsHeaders);
+  }
 
   let parsedBody: any = null;
   try {
     parsedBody = await req.json();
   } catch (_) {
-    return jsonResponse(400, { error: "Invalid JSON" });
+    return jsonResponse(400, { error: "Invalid JSON" }, corsHeaders);
   }
 
-  const transcript = clampString(parsedBody?.transcript, maxTranscriptChars);
-  const baseDateYmd = clampString(parsedBody?.baseDateYmd, 10);
-  if (!transcript) return jsonResponse(400, { error: "transcript required" });
-  if (!isYmd(baseDateYmd)) return jsonResponse(400, { error: "baseDateYmd required (YYYY-MM-DD)" });
+  const reqParsed = parseAssistantRequestBodyStrict(parsedBody, { maxTranscriptChars });
+  if (!reqParsed.ok) {
+    return jsonResponse(400, { error: reqParsed.error }, corsHeaders);
+  }
+  const { transcript, baseDateYmd } = reqParsed.value;
 
   // LLM mode if configured, otherwise heuristic fallback.
   const openAiKey = getEnv("OPENAI_API_KEY");
@@ -211,7 +291,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  return jsonResponse(200, out);
+  return jsonResponse(200, out, corsHeaders);
 });
 
 

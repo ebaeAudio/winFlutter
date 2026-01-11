@@ -1,0 +1,16 @@
+You are working in the `winFlutter` repo (Flutter).
+
+Always read and follow:
+- `agentPrompt.md` (authoritative product + UX requirements)
+- `docs/FRONTEND_SPEC.md` (how UI should be built in this repo)
+
+Frontend / Flutter rules:
+- Prefer Flutter Material 3 widgets and the existing theme in `lib/app/theme.dart`. Do not introduce a new design system package unless explicitly asked.
+- Use `AppScaffold` (`lib/ui/app_scaffold.dart`) for screens to keep padding/max-width consistent.
+- Use the spacing scale in `lib/ui/spacing.dart` (`AppSpace` + `Gap`) instead of ad-hoc magic numbers.
+- Keep UI accessible: good contrast, readable font sizes, touch targets >= 44px, and clear error states.
+
+Code hygiene:
+- Keep widgets small and composable; move reusable UI into `lib/ui/components/`.
+- Prefer deterministic UI behavior over “clever” animations; only add animation when it improves clarity.
+

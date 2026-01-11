@@ -9,9 +9,9 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     final repo = LocalTrackerTalliesRepository(prefs);
 
-    final ymd = '2026-01-06';
-    final trackerId = 't1';
-    final itemKey = 'a';
+    const ymd = '2026-01-06';
+    const trackerId = 't1';
+    const itemKey = 'a';
 
     expect(
       await repo.applyDelta(ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: 1),

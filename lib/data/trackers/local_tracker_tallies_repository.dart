@@ -71,7 +71,7 @@ class LocalTrackerTalliesRepository implements TrackerTalliesRepository {
     final end = DateTime.tryParse(endYmd);
     if (start == null || end == null) return const [];
 
-    final allowed = trackerIds == null ? null : trackerIds.toSet();
+    final allowed = trackerIds?.toSet();
     final out = <TrackerTally>[];
 
     for (var d = DateTime(start.year, start.month, start.day);

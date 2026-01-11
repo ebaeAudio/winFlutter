@@ -45,9 +45,12 @@ Set these in Supabase (Function secrets / environment):
 
 Optional (recommended):
 
+- `SUPABASE_SERVICE_ROLE_KEY`: **server-side only**. Enables durable DB-backed rate limiting across Edge instances. Never ship this to Flutter.
 - `ASSISTANT_ALLOWED_ORIGINS`: comma-separated origin allowlist (ex: `https://app.example.com,http://localhost:5173`)
 - `ASSISTANT_RPM`: per-user requests per minute (default `20`)
+- `ASSISTANT_IP_RPM`: per-IP requests per minute (default `60`)
 - `ASSISTANT_MAX_TRANSCRIPT_CHARS`: input limit (default `2000`)
+- `ASSISTANT_MAX_BODY_BYTES`: request body size limit (default `20000`)
 - `ASSISTANT_OPENAI_TIMEOUT_MS`: OpenAI timeout (default `12000`)
 - `ASSISTANT_DEBUG`: `true` to include a `debug` field in responses (never includes secrets)
 
