@@ -1,16 +1,21 @@
-import 'package:flutter/material.dart';
+import 'dart:math' as math;
 
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../app/user_settings.dart';
 import 'spacing.dart';
 
 /// Standard page wrapper:
 /// - consistent padding
 /// - safe area
 /// - centered content with max width on larger screens
-class AppScaffold extends StatelessWidget {
+class AppScaffold extends ConsumerWidget {
   const AppScaffold({
     super.key,
     required this.title,
     required this.children,
+    this.body,
     this.actions,
     this.bottomNavigationBar,
     this.floatingActionButton,
@@ -19,13 +24,52 @@ class AppScaffold extends StatelessWidget {
 
   final String title;
   final List<Widget> children;
+  final Widget? body;
   final List<Widget>? actions;
   final Widget? bottomNavigationBar;
   final Widget? floatingActionButton;
   final double maxWidth;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(userSettingsControllerProvider);
+    final oneHandEnabled = settings.oneHandModeEnabled;
+    final hand = settings.oneHandModeHand;
+
+    // Using the spacing scale to avoid magic numbers while still producing a
+    // meaningfully "thick" opposing-side gutter.
+    const baseVerticalPadding = AppSpace.s16;
+    final baseHorizontalPadding =
+        settings.disableHorizontalScreenPadding ? AppSpace.s8 : AppSpace.s16;
+    const preferredGutter = AppSpace.s48 + AppSpace.s24;
+
+    final extraLeft =
+        oneHandEnabled && hand == OneHandModeHand.right ? preferredGutter : 0.0;
+    final extraRight =
+        oneHandEnabled && hand == OneHandModeHand.left ? preferredGutter : 0.0;
+
+    final scheme = Theme.of(context).colorScheme;
+    final brightness = Theme.of(context).brightness;
+    final gutterColor = scheme.surfaceContainerHighest
+        .withOpacity(brightness == Brightness.dark ? 0.18 : 0.55);
+    final dividerColor = scheme.outlineVariant
+        .withOpacity(brightness == Brightness.dark ? 0.45 : 0.75);
+
+    final builtBody = body != null
+        ? Padding(
+            padding: EdgeInsets.only(left: extraLeft, right: extraRight),
+            child: body,
+          )
+        : ListView(
+            padding: EdgeInsets.only(
+              left: baseHorizontalPadding + extraLeft,
+              right: baseHorizontalPadding + extraRight,
+              top: baseVerticalPadding,
+              bottom: baseVerticalPadding,
+            ),
+            children: children,
+          );
+
     return Scaffold(
       appBar: AppBar(title: Text(title), actions: actions),
       floatingActionButton: floatingActionButton,
@@ -35,10 +79,38 @@ class AppScaffold extends StatelessWidget {
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxWidth),
-            child: ListView(
-              padding: const EdgeInsets.all(AppSpace.s16),
-              children: children,
-            ),
+            child: oneHandEnabled
+                ? LayoutBuilder(
+                    builder: (context, constraints) {
+                      final maxGutter = math.max(0.0,
+                          constraints.maxWidth - baseHorizontalPadding * 2);
+                      final gutterWidth = math.min(preferredGutter, maxGutter);
+                      final opposingSideIsRight = hand == OneHandModeHand.left;
+
+                      return Stack(
+                        children: [
+                          Positioned(
+                            top: 0,
+                            bottom: 0,
+                            left: opposingSideIsRight ? null : 0,
+                            right: opposingSideIsRight ? 0 : null,
+                            width: gutterWidth,
+                            child: ColoredBox(color: gutterColor),
+                          ),
+                          Positioned(
+                            top: 0,
+                            bottom: 0,
+                            left: opposingSideIsRight ? null : gutterWidth,
+                            right: opposingSideIsRight ? gutterWidth : null,
+                            width: 1,
+                            child: ColoredBox(color: dividerColor),
+                          ),
+                          builtBody,
+                        ],
+                      );
+                    },
+                  )
+                : builtBody,
           ),
         ),
       ),

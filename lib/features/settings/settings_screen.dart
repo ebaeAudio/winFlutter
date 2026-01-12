@@ -8,6 +8,11 @@ import '../../app/env.dart';
 import '../../app/errors.dart';
 import '../../app/supabase.dart';
 import '../../app/theme.dart';
+import '../../app/user_settings.dart';
+import '../focus/dumb_phone_session_gate_controller.dart';
+import '../../platform/nfc/nfc_card_service.dart';
+import '../../platform/nfc/nfc_scan_purpose.dart';
+import '../../platform/nfc/nfc_scan_service.dart';
 import '../../ui/app_scaffold.dart';
 import '../../ui/components/section_header.dart';
 import '../../ui/spacing.dart';
@@ -61,8 +66,15 @@ class SettingsScreen extends ConsumerWidget {
     final auth = ref.watch(authStateProvider).valueOrNull;
     final env = ref.watch(envProvider);
     final themeSettings = ref.watch(themeControllerProvider);
+    final userSettings = ref.watch(userSettingsControllerProvider);
+    final dumbPhoneGate = ref.watch(dumbPhoneSessionGateControllerProvider);
     final supabase = ref.watch(supabaseProvider);
     final client = supabase.client;
+
+    final gate = dumbPhoneGate.valueOrNull;
+    final hasPairedCard = gate?.hasPairedCard == true;
+    final cardRequired = hasPairedCard ? (gate?.cardRequired == true) : false;
+    final sessionActive = gate?.sessionActive == true;
 
     return AppScaffold(
       title: 'Settings',
@@ -106,6 +118,199 @@ class SettingsScreen extends ConsumerWidget {
                   subtitle: const Text('Add quick tallies to Today'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.go('/settings/trackers'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Gap.h16,
+        const SectionHeader(title: 'Dumb Phone Mode'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.s8),
+            child: Column(
+              children: [
+                SwitchListTile.adaptive(
+                  title: const Text('Auto-start 25‑minute timebox'),
+                  subtitle: const Text(
+                    'When a Dumb Phone session starts successfully, jump to Today and start a 25‑minute timer.',
+                  ),
+                  value: userSettings.dumbPhoneAutoStart25mTimebox,
+                  onChanged: (v) => ref
+                      .read(userSettingsControllerProvider.notifier)
+                      .setDumbPhoneAutoStart25mTimebox(v),
+                ),
+                const Divider(height: 1),
+                SwitchListTile.adaptive(
+                  title: const Text('Require NFC card to start/end'),
+                  subtitle: Text(
+                    !hasPairedCard
+                        ? 'Pair a card to enable.'
+                        : sessionActive
+                            ? 'You can change this after the current session ends.'
+                            : 'When enabled, you must scan your paired card to start and end Dumb Phone Mode.',
+                  ),
+                  value: cardRequired,
+                  onChanged: (!hasPairedCard ||
+                          sessionActive ||
+                          dumbPhoneGate.isLoading)
+                      ? null
+                      : (v) => ref
+                          .read(dumbPhoneSessionGateControllerProvider.notifier)
+                          .setCardRequired(context, v),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.nfc),
+                  title:
+                      Text(hasPairedCard ? 'NFC card paired' : 'Pair NFC card'),
+                  subtitle: Text(
+                    hasPairedCard
+                        ? 'You can replace or unpair your card.'
+                        : 'Optional: require a card scan to start/end.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: dumbPhoneGate.isLoading
+                      ? null
+                      : () async {
+                          if (!hasPairedCard) {
+                            final scan = await ref
+                                .read(nfcScanServiceProvider)
+                                .scanKeyHash(context,
+                                    purpose: NfcScanPurpose.pair);
+                            if (scan == null) return;
+
+                            await ref
+                                .read(dumbPhoneSessionGateControllerProvider
+                                    .notifier)
+                                .savePairedCardHash(scan);
+
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Card paired.')),
+                            );
+                            return;
+                          }
+
+                          final action = await showDialog<String>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('NFC card'),
+                              content: const Text(
+                                'You can replace your paired card or unpair it.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(ctx).pop(),
+                                  child: const Text('Cancel'),
+                                ),
+                                OutlinedButton(
+                                  onPressed: () =>
+                                      Navigator.of(ctx).pop('unpair'),
+                                  child: const Text('Unpair'),
+                                ),
+                                FilledButton(
+                                  onPressed: () =>
+                                      Navigator.of(ctx).pop('replace'),
+                                  child: const Text('Replace'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (action == null) return;
+
+                          final current = ref
+                              .read(dumbPhoneSessionGateControllerProvider)
+                              .valueOrNull;
+                          final pairedHash = current?.pairedCardKeyHash;
+                          if (pairedHash == null || pairedHash.isEmpty) return;
+
+                          final nfc = ref.read(nfcCardServiceProvider);
+
+                          Future<bool> verifyCurrentCard() async {
+                            final scan = await ref
+                                .read(nfcScanServiceProvider)
+                                .scanKeyHash(context,
+                                    purpose: NfcScanPurpose.validateUnpair);
+                            if (scan == null) return false;
+                            final ok = nfc.constantTimeEquals(
+                              scan,
+                              pairedHash,
+                            );
+                            if (!ok && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('That is not the paired card.'),
+                                ),
+                              );
+                            }
+                            return ok;
+                          }
+
+                          if (action == 'unpair') {
+                            if (current?.cardRequired == true) {
+                              final ok = await verifyCurrentCard();
+                              if (!ok) return;
+                            } else {
+                              final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Unpair card?'),
+                                  content: const Text(
+                                    'This will remove the paired card from this device.',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.of(ctx).pop(false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () =>
+                                          Navigator.of(ctx).pop(true),
+                                      child: const Text('Unpair'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (ok != true) return;
+                            }
+
+                            await ref
+                                .read(dumbPhoneSessionGateControllerProvider
+                                    .notifier)
+                                .unpairCard();
+
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Card unpaired.')),
+                            );
+                            return;
+                          }
+
+                          if (action == 'replace') {
+                            if (current?.cardRequired == true) {
+                              final ok = await verifyCurrentCard();
+                              if (!ok) return;
+                            }
+                            final next = await ref
+                                .read(nfcScanServiceProvider)
+                                .scanKeyHash(context,
+                                    purpose: NfcScanPurpose.pair);
+                            if (next == null) return;
+
+                            await ref
+                                .read(dumbPhoneSessionGateControllerProvider
+                                    .notifier)
+                                .savePairedCardHash(next);
+
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Card replaced.')),
+                            );
+                            return;
+                          }
+                        },
                 ),
               ],
             ),
@@ -172,6 +377,104 @@ class SettingsScreen extends ConsumerWidget {
                             .setPalette(mode),
                       ),
                   ],
+                ),
+                Gap.h16,
+                Text(
+                  'Layout',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                Gap.h8,
+                Text(
+                  'Use more of the screen by reducing the default horizontal padding.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                Gap.h12,
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Full-width layout'),
+                  value: userSettings.disableHorizontalScreenPadding,
+                  onChanged: (v) => ref
+                      .read(userSettingsControllerProvider.notifier)
+                      .setDisableHorizontalScreenPadding(v),
+                ),
+                Gap.h16,
+                Text(
+                  'One-hand mode',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                Gap.h8,
+                Text(
+                  'Adds a thick “gutter” on the opposite side so controls are easier to reach.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+                Gap.h12,
+                SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enable one-hand mode'),
+                  value: userSettings.oneHandModeEnabled,
+                  onChanged: (v) => ref
+                      .read(userSettingsControllerProvider.notifier)
+                      .setOneHandModeEnabled(v),
+                ),
+                Gap.h8,
+                Text(
+                  'Hand',
+                  style: Theme.of(context)
+                      .textTheme
+                      .labelLarge
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                Gap.h8,
+                SegmentedButton<OneHandModeHand>(
+                  segments: const [
+                    ButtonSegment(
+                      value: OneHandModeHand.left,
+                      label: Text('Left'),
+                      icon: Icon(Icons.swipe_left),
+                    ),
+                    ButtonSegment(
+                      value: OneHandModeHand.right,
+                      label: Text('Right'),
+                      icon: Icon(Icons.swipe_right),
+                    ),
+                  ],
+                  selected: {userSettings.oneHandModeHand},
+                  onSelectionChanged: userSettings.oneHandModeEnabled
+                      ? (set) => ref
+                          .read(userSettingsControllerProvider.notifier)
+                          .setOneHandModeHand(set.first)
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+        Gap.h16,
+        const SectionHeader(title: 'Support'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.s8),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.feedback_outlined),
+                  title: const Text('Send feedback'),
+                  subtitle:
+                      const Text('Report a bug or suggest an improvement'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.go(
+                    '/settings/feedback?entryPoint=${Uri.encodeComponent('settings')}',
+                  ),
                 ),
               ],
             ),

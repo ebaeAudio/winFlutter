@@ -1,5 +1,11 @@
 import 'task.dart';
 
+class TasksRepositoryUnset {
+  const TasksRepositoryUnset();
+}
+
+const tasksRepositoryUnset = TasksRepositoryUnset();
+
 abstract interface class TasksRepository {
   Future<List<Task>> listForDate({required String ymd});
 
@@ -13,6 +19,8 @@ abstract interface class TasksRepository {
     required String id,
     String? title,
     String? details,
+    String? starterStep,
+    Object? estimatedMinutes = tasksRepositoryUnset,
     TaskType? type,
 
     /// YYYY-MM-DD

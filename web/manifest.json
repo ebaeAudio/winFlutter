@@ -1,6 +1,6 @@
 {
-    "name": "win_flutter",
-    "short_name": "win_flutter",
+    "name": "Win The Year",
+    "short_name": "Win The Year",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

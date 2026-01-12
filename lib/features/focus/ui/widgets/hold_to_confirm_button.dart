@@ -9,12 +9,16 @@ class HoldToConfirmButton extends StatefulWidget {
     required this.onConfirmed,
     required this.label,
     this.icon,
+    this.enabled = true,
+    this.busyLabel,
   });
 
   final Duration holdDuration;
   final Future<void> Function() onConfirmed;
   final String label;
   final IconData? icon;
+  final bool enabled;
+  final String? busyLabel;
 
   @override
   State<HoldToConfirmButton> createState() => _HoldToConfirmButtonState();
@@ -23,11 +27,14 @@ class HoldToConfirmButton extends StatefulWidget {
 class _HoldToConfirmButtonState extends State<HoldToConfirmButton> {
   Timer? _timer;
   double _progress = 0;
+  bool _busy = false;
 
   void _start() {
+    if (!widget.enabled || _busy) return;
     _timer?.cancel();
     final start = DateTime.now();
     _timer = Timer.periodic(const Duration(milliseconds: 16), (_) async {
+      if (_busy || !widget.enabled) return;
       final elapsed = DateTime.now().difference(start);
       final p = (elapsed.inMilliseconds / widget.holdDuration.inMilliseconds)
           .clamp(0.0, 1.0);
@@ -35,9 +42,21 @@ class _HoldToConfirmButtonState extends State<HoldToConfirmButton> {
       setState(() => _progress = p);
       if (p >= 1.0) {
         _timer?.cancel();
-        await widget.onConfirmed();
-        if (!mounted) return;
-        setState(() => _progress = 0);
+        // Immediately reset the hold UI and switch to a "busy" state so users
+        // don't feel like the button is stuck at 100% while async work runs.
+        setState(() {
+          _progress = 0;
+          _busy = true;
+        });
+        unawaited(() async {
+          try {
+            await widget.onConfirmed();
+          } finally {
+            if (mounted) {
+              setState(() => _busy = false);
+            }
+          }
+        }());
       }
     });
   }
@@ -55,6 +74,19 @@ class _HoldToConfirmButtonState extends State<HoldToConfirmButton> {
 
   @override
   Widget build(BuildContext context) {
+    final icon = _busy
+        ? SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
+          )
+        : Icon(widget.icon ?? Icons.lock);
+
+    final label = Text(_busy ? (widget.busyLabel ?? widget.label) : widget.label);
+
     return GestureDetector(
       onTapDown: (_) => _start(),
       onTapUp: (_) => _cancel(),
@@ -66,8 +98,8 @@ class _HoldToConfirmButtonState extends State<HoldToConfirmButton> {
             width: double.infinity,
             child: FilledButton.icon(
               onPressed: null,
-              icon: Icon(widget.icon ?? Icons.lock),
-              label: Text(widget.label),
+              icon: icon,
+              label: label,
             ),
           ),
           Positioned.fill(

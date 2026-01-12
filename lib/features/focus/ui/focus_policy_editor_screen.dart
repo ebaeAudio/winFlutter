@@ -7,6 +7,8 @@ import '../../../domain/focus/app_identifier.dart';
 import '../../../domain/focus/focus_friction.dart';
 import '../../../domain/focus/focus_policy.dart';
 import '../../../ui/app_scaffold.dart';
+import '../../../ui/components/reachability_fab_cluster.dart';
+import '../../../ui/nav_shell.dart';
 import '../focus_policy_controller.dart';
 import '../focus_providers.dart';
 
@@ -30,6 +32,36 @@ class _FocusPolicyEditorScreenState
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
   FocusPolicy? _policy;
+
+  Future<void> _savePolicy({
+    required FocusPolicy policy,
+  }) async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final updated = policy.copyWith(
+      name: _name.text.trim(),
+      updatedAt: DateTime.now(),
+    );
+    final controller = ref.read(focusPolicyListProvider.notifier);
+    await controller.upsert(updated);
+    if (!mounted) return;
+
+    final result = ref.read(focusPolicyListProvider);
+    if (result.hasError) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save policy: ${result.error}')),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Policy saved')),
+    );
+
+    if (widget.closeOnSave) {
+      if (!context.mounted) return;
+      context.go('/focus/policies');
+    }
+  }
 
   @override
   void initState() {
@@ -72,36 +104,44 @@ class _FocusPolicyEditorScreenState
       actions: [
         IconButton(
           tooltip: 'Save',
-          onPressed: () async {
-            if (!(_formKey.currentState?.validate() ?? false)) return;
-            final updated = policy.copyWith(
-              name: _name.text.trim(),
-              updatedAt: DateTime.now(),
-            );
-            final controller = ref.read(focusPolicyListProvider.notifier);
-            await controller.upsert(updated);
-            if (!context.mounted) return;
-
-            final result = ref.read(focusPolicyListProvider);
-            if (result.hasError) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                    content: Text('Failed to save policy: ${result.error}')),
-              );
-              return;
-            }
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Policy saved')),
-            );
-
-            if (widget.closeOnSave) {
-              context.go('/focus/policies');
-            }
-          },
+          onPressed: () => _savePolicy(policy: policy),
           icon: const Icon(Icons.save),
         ),
       ],
+      floatingActionButton: ReachabilityFabCluster(
+        bottomBarHeight: NavShell.navBarHeight,
+        actions: [
+          if (isIOS)
+            ReachabilityFabAction(
+              icon: Icons.apps,
+              tooltip: 'Choose apps (iOS)',
+              onPressed: () async {
+                try {
+                  await engine.configureApps();
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Updated iOS blocked apps selection'),
+                    ),
+                  );
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to open iOS app picker: $e')),
+                  );
+                }
+              },
+              semanticLabel: 'Choose apps to block on iOS',
+            ),
+          ReachabilityFabAction(
+            icon: Icons.save,
+            tooltip: 'Save',
+            label: 'Save',
+            isPrimary: true,
+            onPressed: () => _savePolicy(policy: policy),
+          ),
+        ],
+      ),
       children: [
         Form(
           key: _formKey,

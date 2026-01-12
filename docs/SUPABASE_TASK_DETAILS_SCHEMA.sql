@@ -8,6 +8,11 @@ alter table public.tasks
   add column if not exists actual_minutes integer,
   add column if not exists next_step text;
 
+-- Focus v2 (MVP): add task fields used by Focus mode
+alter table public.tasks
+  add column if not exists starter_step text,
+  add column if not exists estimated_minutes integer;
+
 -- 2) Create `task_subtasks`
 create table if not exists public.task_subtasks (
   id uuid primary key default gen_random_uuid(),

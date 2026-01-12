@@ -41,6 +41,14 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
 
+    # Ensure Release/Profile builds generate dSYM files (improves App Store Connect symbol uploads).
+    target.build_configurations.each do |config|
+      # Only force this for non-Debug configs to avoid slowing Debug builds.
+      if config.name != 'Debug'
+        config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
+      end
+    end
+
     # Xcode's clang dependency scanner can fail to build the CwlCatchExceptionSupport
     # module because its umbrella header imports <CwlCatchException.h>, which may not
     # yet exist in the built framework headers at scan time. Point the header search

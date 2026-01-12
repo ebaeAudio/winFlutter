@@ -12,6 +12,7 @@ import '../features/settings/settings_screen.dart';
 import '../features/settings/trackers/tracker_editor_screen.dart';
 import '../features/settings/trackers/trackers_screen.dart';
 import '../features/setup/setup_screen.dart';
+import '../features/feedback/feedback_screen.dart';
 import '../features/tasks/all_tasks_screen.dart';
 import '../features/today/today_screen.dart';
 import '../features/tasks/task_details_screen.dart';
@@ -186,6 +187,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                         ),
                       ),
                     ],
+                  ),
+                  GoRoute(
+                    path: 'feedback',
+                    builder: (context, state) => FeedbackScreen(
+                      entryPoint: state.uri.queryParameters['entryPoint'],
+                    ),
                   ),
                 ],
               ),

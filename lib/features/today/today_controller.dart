@@ -2,14 +2,15 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../app/auth.dart';
 import '../../app/theme.dart';
 import '../../data/habits/habits_repository.dart';
 import '../../data/habits/habits_providers.dart';
 import '../../data/tasks/task.dart' as data;
 import '../../data/tasks/tasks_providers.dart';
 import '../../data/tasks/tasks_repository.dart';
+import '../../domain/focus/active_timebox.dart';
 import 'today_models.dart';
 
 final todayControllerProvider =
@@ -18,8 +19,10 @@ final todayControllerProvider =
   final prefs = ref.watch(sharedPreferencesProvider);
   final tasksRepo = ref.watch(tasksRepositoryProvider);
   final habitsRepo = ref.watch(habitsRepositoryProvider);
-  final isSignedIn =
-      tasksRepo != null && Supabase.instance.client.auth.currentSession != null;
+  // Important: this must react to auth changes; otherwise Today can get stuck in
+  // "local-only" mode if it initializes before Supabase session restoration.
+  final auth = ref.watch(authStateProvider).valueOrNull;
+  final isSignedIn = tasksRepo != null && (auth?.isSignedIn ?? false);
   return TodayController(
     prefs: prefs,
     ymd: ymd,
@@ -51,6 +54,8 @@ class TodayController extends StateNotifier<TodayDayData> {
         reflection: _prefs.getString(_keyForReflection(_ymd)) ?? '',
         focusModeEnabled: _prefs.getBool(_keyForFocusEnabled(_ymd)) ?? false,
         focusTaskId: _prefs.getString(_keyForFocusTaskId(_ymd)),
+        activeTimebox:
+            ActiveTimebox.fromJsonString(_prefs.getString(_keyForActiveTimebox(_ymd)) ?? ''),
       );
       unawaited(_loadTasksFromSupabase());
     }
@@ -66,6 +71,7 @@ class TodayController extends StateNotifier<TodayDayData> {
   static String _keyForReflection(String ymd) => 'today_reflection_$ymd';
   static String _keyForFocusEnabled(String ymd) => 'today_focus_enabled_$ymd';
   static String _keyForFocusTaskId(String ymd) => 'today_focus_task_id_$ymd';
+  static String _keyForActiveTimebox(String ymd) => 'today_active_timebox_$ymd';
 
   bool get _isSupabaseMode => _tasksRepository != null;
 
@@ -80,6 +86,8 @@ class TodayController extends StateNotifier<TodayDayData> {
       type: type,
       completed: t.completed,
       details: t.details,
+      starterStep: t.starterStep,
+      estimatedMinutes: t.estimatedMinutes,
       createdAtMs: t.createdAt.millisecondsSinceEpoch,
     );
   }
@@ -103,6 +111,15 @@ class TodayController extends StateNotifier<TodayDayData> {
       return;
     }
     await _prefs.setString(_keyForFocusTaskId(_ymd), taskId);
+  }
+
+  Future<void> _saveActiveTimebox(ActiveTimebox? timebox) async {
+    if (timebox == null) {
+      await _prefs.remove(_keyForActiveTimebox(_ymd));
+      return;
+    }
+    await _prefs.setString(
+        _keyForActiveTimebox(_ymd), ActiveTimebox.toJsonString(timebox));
   }
 
   Future<void> _loadTasksFromSupabase() async {
@@ -155,6 +172,19 @@ class TodayController extends StateNotifier<TodayDayData> {
     state = next;
     if (_isSupabaseMode) {
       await _saveFocusTaskId(taskId);
+    } else {
+      await _saveLocalDay(next);
+    }
+  }
+
+  /// Persist (or clear) the active timebox for this day.
+  ///
+  /// This is stored per-day and restored on app relaunch.
+  Future<void> setActiveTimebox(ActiveTimebox? timebox) async {
+    final next = state.copyWith(activeTimebox: timebox);
+    state = next;
+    if (_isSupabaseMode) {
+      await _saveActiveTimebox(timebox);
     } else {
       await _saveLocalDay(next);
     }
@@ -278,6 +308,54 @@ class TodayController extends StateNotifier<TodayDayData> {
     final nextTasks = [
       for (final t in state.tasks)
         if (t.id == taskId) t.copyWith(title: trimmed) else t
+    ];
+    await _saveLocalDay(state.copyWith(tasks: nextTasks));
+  }
+
+  Future<void> updateTaskStarterStep({
+    required String taskId,
+    required String starterStep,
+  }) async {
+    final trimmed = starterStep.trimRight();
+    if (_isSupabaseMode) {
+      final updated =
+          await _tasksRepository!.update(id: taskId, starterStep: trimmed);
+      final nextTasks = [
+        for (final t in state.tasks)
+          if (t.id == taskId) _toTodayTask(updated) else t,
+      ];
+      state = state.copyWith(tasks: nextTasks);
+      return;
+    }
+
+    final nextTasks = [
+      for (final t in state.tasks)
+        if (t.id == taskId) t.copyWith(starterStep: trimmed) else t,
+    ];
+    await _saveLocalDay(state.copyWith(tasks: nextTasks));
+  }
+
+  Future<void> updateTaskEstimatedMinutes({
+    required String taskId,
+    required int? estimatedMinutes,
+  }) async {
+    if (_isSupabaseMode) {
+      final updated = await _tasksRepository!
+          .update(id: taskId, estimatedMinutes: estimatedMinutes);
+      final nextTasks = [
+        for (final t in state.tasks)
+          if (t.id == taskId) _toTodayTask(updated) else t,
+      ];
+      state = state.copyWith(tasks: nextTasks);
+      return;
+    }
+
+    final nextTasks = [
+      for (final t in state.tasks)
+        if (t.id == taskId)
+          t.copyWith(estimatedMinutes: estimatedMinutes)
+        else
+          t,
     ];
     await _saveLocalDay(state.copyWith(tasks: nextTasks));
   }

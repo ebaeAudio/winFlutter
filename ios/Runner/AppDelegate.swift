@@ -8,17 +8,26 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // Register plugins first, then let FlutterAppDelegate finish setup.
-    // This matches Flutter's default template ordering and avoids subtle startup crashes
-    // around plugin registration / launch option handling.
-    GeneratedPluginRegistrant.register(with: self)
-
-    // Dumb Phone Mode restriction engine method-channel.
-    if let registrar = registrar(forPlugin: "RestrictionEnginePlugin") {
-      RestrictionEnginePlugin.register(with: registrar)
-    }
-
+    // With a SceneDelegate + storyboard-driven FlutterViewController, the Flutter
+    // engine/binary messenger is not guaranteed to be ready during AppDelegate
+    // didFinishLaunching. Registering plugins here can crash (EXC_BAD_ACCESS)
+    // when a plugin creates channels using a nil/invalid messenger.
+    //
+    // Plugin registration is performed in SceneDelegate once the window's root
+    // FlutterViewController exists.
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  @available(iOS 13.0, *)
+  override func application(
+    _ application: UIApplication,
+    configurationForConnecting connectingSceneSession: UISceneSession,
+    options: UIScene.ConnectionOptions
+  ) -> UISceneConfiguration {
+    return UISceneConfiguration(
+      name: "Default Configuration",
+      sessionRole: connectingSceneSession.role
+    )
   }
 }
 #else

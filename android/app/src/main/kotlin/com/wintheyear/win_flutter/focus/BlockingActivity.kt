@@ -22,6 +22,7 @@ class BlockingActivity : Activity() {
     val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
     val frictionRaw = prefs.getString("frictionJson", "{}") ?: "{}"
     val friction = parseFriction(frictionRaw)
+    val cardRequired = prefs.getBoolean("cardRequired", false)
 
     val root = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
@@ -46,15 +47,25 @@ class BlockingActivity : Activity() {
     }
 
     val hint = TextView(this).apply {
-      text = "Hold to unlock (early exit)"
+      text = if (cardRequired) {
+        "Card required to end early. Open Win The Year to scan your paired card."
+      } else {
+        "Hold to unlock (early exit)"
+      }
       gravity = Gravity.CENTER
     }
 
     val holdBtn = Button(this).apply {
-      text = "Hold ${friction.holdToUnlockSeconds}s"
+      text = if (cardRequired) {
+        "End requires card scan"
+      } else {
+        "Hold ${friction.holdToUnlockSeconds}s"
+      }
+      isEnabled = !cardRequired
     }
 
     holdBtn.setOnLongClickListener {
+      if (cardRequired) return@setOnLongClickListener true
       holdBtn.isEnabled = false
       hint.text = "Waiting ${friction.unlockDelaySeconds}s…"
       Handler(Looper.getMainLooper()).postDelayed({
@@ -67,12 +78,29 @@ class BlockingActivity : Activity() {
     }
 
     val emergencyBtn = Button(this).apply {
-      text = "Emergency unlock (${friction.emergencyUnlockMinutes} min)"
+      text = if (cardRequired) {
+        "Emergency unlock disabled"
+      } else {
+        "Emergency unlock (${friction.emergencyUnlockMinutes} min)"
+      }
+      isEnabled = !cardRequired
     }
 
     emergencyBtn.setOnClickListener {
+      if (cardRequired) return@setOnClickListener
       val until = System.currentTimeMillis() + (friction.emergencyUnlockMinutes * 60_000L)
       prefs.edit().putLong("emergencyUntilMillis", until).apply()
+      finish()
+    }
+
+    val openAppBtn = Button(this).apply {
+      text = "Open Win The Year"
+    }
+    openAppBtn.setOnClickListener {
+      val launch = packageManager.getLaunchIntentForPackage(applicationContext.packageName)
+      if (launch != null) {
+        startActivity(launch)
+      }
       finish()
     }
 
@@ -81,6 +109,9 @@ class BlockingActivity : Activity() {
     root.addView(hint)
     root.addView(holdBtn)
     root.addView(emergencyBtn)
+    if (cardRequired) {
+      root.addView(openAppBtn)
+    }
 
     setContentView(root)
   }

@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../data/trackers/tracker_models.dart';
 import '../../../ui/app_scaffold.dart';
+import '../../../ui/components/reachability_fab_cluster.dart';
+import '../../../ui/nav_shell.dart';
 import '../../../ui/components/section_header.dart';
 import '../../../ui/spacing.dart';
 import 'trackers_controller.dart';
@@ -169,6 +171,26 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
             onPressed: () => _toggleArchive(context, tracker: tracker!),
           ),
       ],
+      floatingActionButton: ReachabilityFabCluster(
+        bottomBarHeight: NavShell.navBarHeight,
+        actions: [
+          ReachabilityFabAction(
+            icon: Icons.add,
+            tooltip: 'Add item',
+            onPressed: _itemKeys.length >= 3
+                ? null
+                : () => setState(() => _addEmptyItem(key: _nextKey())),
+            semanticLabel: 'Add tracker item',
+          ),
+          ReachabilityFabAction(
+            icon: Icons.save,
+            tooltip: _isNew ? 'Create' : 'Save',
+            label: _isNew ? 'Create' : 'Save',
+            isPrimary: true,
+            onPressed: () => _save(context, tracker: tracker),
+          ),
+        ],
+      ),
       children: [
         const SectionHeader(title: 'Basics'),
         Card(

@@ -38,12 +38,19 @@ class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
     await endSession(reason: FocusSessionEndReason.completed);
   }
 
-  Future<void> startSession({
+  /// Returns true if the session started successfully.
+  ///
+  /// This allows UI flows (like post-start navigation) to remain predictable:
+  /// no navigation on failure or cancel.
+  Future<bool> startSession({
     required String policyId,
     required Duration duration,
   }) async {
+    final active = state.valueOrNull;
+    if (active != null && active.isActive) return false;
+
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
+    try {
       final policy = await _policies.getPolicy(policyId);
       if (policy == null) {
         throw StateError('Policy not found');
@@ -67,8 +74,12 @@ class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
       );
 
       await _sessions.saveActiveSession(session);
-      return session;
-    });
+      state = AsyncData(session);
+      return true;
+    } catch (e, st) {
+      state = AsyncError(e, st);
+      return false;
+    }
   }
 
   Future<void> endSession({required FocusSessionEndReason reason}) async {
@@ -81,7 +92,9 @@ class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
       return;
     }
 
-    state = const AsyncLoading();
+    // Preserve the previous session while we perform the slow platform cleanup,
+    // so the UI can show "Ending..." instead of blank-loading the whole card.
+    state = const AsyncLoading<FocusSession?>().copyWithPrevious(state);
     state = await AsyncValue.guard(() async {
       await _engine.endSession();
 

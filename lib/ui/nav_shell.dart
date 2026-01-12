@@ -5,12 +5,14 @@ class NavShell extends StatelessWidget {
   const NavShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
+  static const double navBarHeight = 80;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: NavigationBar(
+        height: navBarHeight,
         selectedIndex: navigationShell.currentIndex,
         destinations: const [
           NavigationDestination(icon: Icon(Icons.today), label: 'Today'),

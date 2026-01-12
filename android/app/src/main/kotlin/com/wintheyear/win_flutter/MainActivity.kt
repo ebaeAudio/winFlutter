@@ -79,6 +79,19 @@ class MainActivity: FlutterActivity() {
             result.success(null)
           }
 
+          "setCardRequired" -> {
+            val args = call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()
+            val required = (args["required"] as? Boolean) ?: false
+            val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
+            val e = prefs.edit().putBoolean("cardRequired", required)
+            if (required) {
+              // No bypass: when cardRequired is enabled, clear any active emergency window.
+              e.remove("emergencyUntilMillis")
+            }
+            e.apply()
+            result.success(null)
+          }
+
           else -> result.notImplemented()
         }
       }

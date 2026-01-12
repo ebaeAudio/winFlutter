@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Win Flutter</string>
+	<string>Win The Year</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -31,15 +31,36 @@
 		<string>_dartobservatory._tcp</string>
 	</array>
 	<key>NSFamilyControlsUsageDescription</key>
-	<string>Win Flutter needs access to Screen Time to help you block distracting apps and stay focused during focus mode. This allows the app to restrict access to apps you choose.</string>
+	<string>Win The Year needs access to Screen Time to help you block distracting apps and stay focused during focus mode. This allows the app to restrict access to apps you choose.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Allow local network access to enable Flutter debugging and connect to the Dart VM service during development.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Win Flutter uses the microphone so you can speak tasks, habits, and reflections hands-free.</string>
+	<string>Win The Year uses the microphone so you can speak tasks, habits, and reflections hands-free.</string>
+	<key>NFCReaderUsageDescription</key>
+	<string>Win The Year uses NFC to scan your paired card to start/end Dumb Phone Mode.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Win Flutter uses speech recognition to turn what you say into tasks, habits, and reflections.</string>
+	<string>Win The Year uses speech recognition to turn what you say into tasks, habits, and reflections.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

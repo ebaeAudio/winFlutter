@@ -23,6 +23,8 @@ class Task {
     required this.userId,
     required this.title,
     required this.details,
+    required this.starterStep,
+    required this.estimatedMinutes,
     required this.type,
     required this.date,
     required this.completed,
@@ -38,6 +40,12 @@ class Task {
 
   final String title;
   final String? details;
+
+  /// Optional micro-step scaffolding (Focus v2).
+  final String? starterStep;
+
+  /// Optional estimate in minutes (Focus v2).
+  final int? estimatedMinutes;
   final TaskType type;
 
   /// YYYY-MM-DD
@@ -55,6 +63,8 @@ class Task {
       userId: (json['user_id'] as String?) ?? '',
       title: (json['title'] as String?) ?? '',
       details: (json['details'] as String?),
+      starterStep: (json['starter_step'] as String?),
+      estimatedMinutes: (json['estimated_minutes'] as num?)?.toInt(),
       type: TaskType.fromDb((json['type'] as String?) ?? ''),
       date: (json['date'] as String?) ?? '',
       completed: (json['completed'] as bool?) ?? false,

@@ -2,14 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Family Controls - Required for app blocking -->
 	<key>com.apple.developer.family-controls</key>
 	<true/>
-	
-	<!-- App Groups - Required for sharing data between app and system -->
-	<!-- NOTE: Replace 'com-wintheyear-winFlutter-dev' with your actual bundle ID format -->
-	<!-- If your bundle ID uses dots (com.wintheyear.winFlutter), use: group.com.wintheyear.winFlutter -->
-	<!-- If your bundle ID uses dashes (com-wintheyear-winFlutter-dev), use: group.com-wintheyear-winFlutter-dev -->
+	<key>com.apple.developer.nfc.readersession.formats</key>
+	<array>
+		<string>TAG</string>
+	</array>
 	<key>com.apple.security.application-groups</key>
 	<array>
 		<string>group.com-wintheyear-winFlutter-dev</string>

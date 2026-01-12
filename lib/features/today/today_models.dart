@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../../domain/focus/active_timebox.dart';
+
 enum TodayTaskType {
   mustWin,
   niceToDo;
@@ -30,6 +32,8 @@ class TodayTask {
     required this.createdAtMs,
     this.details,
     this.notes,
+    this.starterStep,
+    this.estimatedMinutes,
     this.nextStep,
     this.estimateMinutes,
     this.actualMinutes,
@@ -43,7 +47,17 @@ class TodayTask {
   final int createdAtMs;
   final String? details;
   final String? notes;
+
+  /// Focus v2: micro-step scaffolding for task initiation.
+  final String? starterStep;
+
+  /// Focus v2: estimate in minutes (optional).
+  final int? estimatedMinutes;
+
+  /// Legacy alias for starterStep (kept for local/demo mode details screen).
   final String? nextStep;
+
+  /// Legacy alias for estimatedMinutes (kept for local/demo mode details screen).
   final int? estimateMinutes;
   final int? actualMinutes;
   final List<TodaySubtask> subtasks;
@@ -54,11 +68,16 @@ class TodayTask {
     bool? completed,
     String? details,
     String? notes,
+    String? starterStep,
+    int? estimatedMinutes,
     String? nextStep,
     int? estimateMinutes,
     int? actualMinutes,
     List<TodaySubtask>? subtasks,
   }) {
+    final resolvedStarterStep = starterStep ?? this.starterStep ?? nextStep ?? this.nextStep;
+    final resolvedEstimatedMinutes =
+        estimatedMinutes ?? this.estimatedMinutes ?? estimateMinutes ?? this.estimateMinutes;
     return TodayTask(
       id: id,
       title: title ?? this.title,
@@ -67,8 +86,11 @@ class TodayTask {
       createdAtMs: createdAtMs,
       details: details ?? this.details,
       notes: notes ?? this.notes,
-      nextStep: nextStep ?? this.nextStep,
-      estimateMinutes: estimateMinutes ?? this.estimateMinutes,
+      starterStep: resolvedStarterStep,
+      estimatedMinutes: resolvedEstimatedMinutes,
+      // Keep legacy aliases in sync for existing local/demo mode screens.
+      nextStep: resolvedStarterStep,
+      estimateMinutes: resolvedEstimatedMinutes,
       actualMinutes: actualMinutes ?? this.actualMinutes,
       subtasks: subtasks ?? this.subtasks,
     );
@@ -82,6 +104,10 @@ class TodayTask {
         'createdAtMs': createdAtMs,
         if (details != null) 'details': details,
         if (notes != null) 'notes': notes,
+        // Focus v2 canonical keys
+        if (starterStep != null) 'starterStep': starterStep,
+        if (estimatedMinutes != null) 'estimatedMinutes': estimatedMinutes,
+        // Legacy keys (still written for back-compat with existing local/demo payloads)
         if (nextStep != null) 'nextStep': nextStep,
         if (estimateMinutes != null) 'estimateMinutes': estimateMinutes,
         if (actualMinutes != null) 'actualMinutes': actualMinutes,
@@ -102,6 +128,12 @@ class TodayTask {
       }
     }
 
+    final starterStep =
+        (json['starterStep'] as String?) ?? (json['nextStep'] as String?);
+    final estimatedMinutes =
+        (json['estimatedMinutes'] as num?)?.toInt() ??
+            (json['estimateMinutes'] as num?)?.toInt();
+
     return TodayTask(
       id: (json['id'] as String?) ?? '',
       title: (json['title'] as String?) ?? '',
@@ -111,8 +143,11 @@ class TodayTask {
       createdAtMs: (json['createdAtMs'] as num?)?.toInt() ?? 0,
       details: (json['details'] as String?) ?? (json['notes'] as String?),
       notes: (json['notes'] as String?),
-      nextStep: (json['nextStep'] as String?),
-      estimateMinutes: (json['estimateMinutes'] as num?)?.toInt(),
+      starterStep: starterStep,
+      estimatedMinutes: estimatedMinutes,
+      // Keep legacy aliases populated for existing screens.
+      nextStep: starterStep,
+      estimateMinutes: estimatedMinutes,
       actualMinutes: (json['actualMinutes'] as num?)?.toInt(),
       subtasks: subtasks,
     );
@@ -192,6 +227,7 @@ class TodayDayData {
     required this.reflection,
     required this.focusModeEnabled,
     required this.focusTaskId,
+    required this.activeTimebox,
   });
 
   final String ymd;
@@ -205,12 +241,16 @@ class TodayDayData {
   /// Optional: user-picked focus task for the day.
   final String? focusTaskId;
 
+  /// Optional: active timebox for the day (persisted locally).
+  final ActiveTimebox? activeTimebox;
+
   TodayDayData copyWith({
     List<TodayTask>? tasks,
     List<TodayHabit>? habits,
     String? reflection,
     bool? focusModeEnabled,
     String? focusTaskId,
+    ActiveTimebox? activeTimebox,
   }) {
     return TodayDayData(
       ymd: ymd,
@@ -219,6 +259,7 @@ class TodayDayData {
       reflection: reflection ?? this.reflection,
       focusModeEnabled: focusModeEnabled ?? this.focusModeEnabled,
       focusTaskId: focusTaskId,
+      activeTimebox: activeTimebox ?? this.activeTimebox,
     );
   }
 
@@ -228,6 +269,7 @@ class TodayDayData {
         'reflection': reflection,
         'focusModeEnabled': focusModeEnabled,
         'focusTaskId': focusTaskId,
+        if (activeTimebox != null) 'activeTimebox': activeTimebox!.toJson(),
       };
 
   static TodayDayData empty(String ymd) => TodayDayData(
@@ -237,6 +279,7 @@ class TodayDayData {
         reflection: '',
         focusModeEnabled: false,
         focusTaskId: null,
+        activeTimebox: null,
       );
 
   static TodayDayData fromJson(Map<String, Object?> json) {
@@ -252,6 +295,14 @@ class TodayDayData {
       }
     }
 
+    final rawTimebox = json['activeTimebox'];
+    ActiveTimebox? activeTimebox;
+    if (rawTimebox is Map<String, Object?>) {
+      activeTimebox = ActiveTimebox.fromJson(rawTimebox);
+    } else if (rawTimebox is Map) {
+      activeTimebox = ActiveTimebox.fromJson(rawTimebox.cast<String, Object?>());
+    }
+
     return TodayDayData(
       ymd: (json['ymd'] as String?) ?? '',
       tasks: tasks,
@@ -259,6 +310,7 @@ class TodayDayData {
       reflection: (json['reflection'] as String?) ?? '',
       focusModeEnabled: (json['focusModeEnabled'] as bool?) ?? false,
       focusTaskId: json['focusTaskId'] as String?,
+      activeTimebox: activeTimebox,
     );
   }
 
@@ -288,6 +340,7 @@ class TodayDayData {
       reflection: reflection,
       focusModeEnabled: focusModeEnabled,
       focusTaskId: focusTaskId,
+      activeTimebox: activeTimebox,
     );
   }
 }

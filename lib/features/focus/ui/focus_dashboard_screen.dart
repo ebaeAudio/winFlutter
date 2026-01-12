@@ -8,7 +8,13 @@ import '../../../domain/focus/focus_session.dart';
 import '../../../domain/focus/focus_policy.dart';
 import '../../../domain/focus/focus_friction.dart';
 import '../../../ui/app_scaffold.dart';
+import '../../../app/user_settings.dart';
+import '../../../platform/nfc/nfc_card_service.dart';
+import '../../../platform/nfc/nfc_scan_purpose.dart';
+import '../../../platform/nfc/nfc_scan_service.dart';
 import '../../today/today_controller.dart';
+import '../../today/today_timebox_controller.dart';
+import '../dumb_phone_session_gate_controller.dart';
 import '../focus_policy_controller.dart';
 import '../focus_session_controller.dart';
 import '../focus_ticker_provider.dart';
@@ -37,15 +43,32 @@ class FocusDashboardScreen extends ConsumerWidget {
         ),
       ],
       children: [
-        active.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text('Session error: $e'),
-            ),
-          ),
-          data: (session) => _ActiveSessionCard(session: session),
+        Builder(
+          builder: (context) {
+            final session = active.valueOrNull;
+            // If we're loading but still have the previous session, treat this as
+            // "ending..." rather than a full blank loading state.
+            final isEnding = active.isLoading && session != null;
+
+            if (active.isLoading && session == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (active.hasError && session == null) {
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text('Session error: ${active.error}'),
+                ),
+              );
+            }
+
+            return _ActiveSessionCard(
+              session: session,
+              isEnding: isEnding,
+              error: active.hasError ? active.error : null,
+            );
+          },
         ),
         const SizedBox(height: 12),
         policies.when(
@@ -63,13 +86,40 @@ class FocusDashboardScreen extends ConsumerWidget {
   }
 }
 
-class _ActiveSessionCard extends ConsumerWidget {
-  const _ActiveSessionCard({required this.session});
+class _ActiveSessionCard extends ConsumerStatefulWidget {
+  const _ActiveSessionCard({
+    required this.session,
+    this.isEnding = false,
+    this.error,
+  });
 
   final FocusSession? session;
+  final bool isEnding;
+  final Object? error;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ActiveSessionCard> createState() => _ActiveSessionCardState();
+}
+
+class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
+  String? _didScheduleReconcileForSessionId;
+
+  @override
+  void didUpdateWidget(covariant _ActiveSessionCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final nextId = widget.session?.id;
+    if (nextId == null) {
+      _didScheduleReconcileForSessionId = null;
+      return;
+    }
+    if (oldWidget.session?.id != nextId) {
+      _didScheduleReconcileForSessionId = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.session;
     if (session == null) {
       return Card(
         child: Padding(
@@ -83,23 +133,27 @@ class _ActiveSessionCard extends ConsumerWidget {
     }
 
     final now = ref.watch(nowTickerProvider).valueOrNull ?? DateTime.now();
-    final remaining = session!.plannedEndAt.difference(now);
+    final remaining = session.plannedEndAt.difference(now);
     final mmss = _formatRemaining(remaining);
 
     final policies =
         ref.watch(focusPolicyListProvider).valueOrNull ?? const <FocusPolicy>[];
     FocusPolicy? policy;
     for (final p in policies) {
-      if (p.id == session!.policyId) {
+      if (p.id == session.policyId) {
         policy = p;
         break;
       }
     }
     final friction = policy?.friction ?? FocusFrictionSettings.defaults;
+    final gate = ref.watch(dumbPhoneSessionGateControllerProvider).valueOrNull;
+    final cardRequired = gate?.cardRequired == true;
 
     // Ensure we auto-complete once the timer elapses.
     // IMPORTANT: Do not modify providers during build; defer to after the frame.
-    if (remaining <= Duration.zero) {
+    if (remaining <= Duration.zero &&
+        _didScheduleReconcileForSessionId != session.id) {
+      _didScheduleReconcileForSessionId = session.id;
       final activeController = ref.read(activeFocusSessionProvider.notifier);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         // Avoid using `ref` in an async/post-frame callback; the widget might be disposed.
@@ -115,18 +169,47 @@ class _ActiveSessionCard extends ConsumerWidget {
           children: [
             Text('Session active',
                 style: Theme.of(context).textTheme.titleMedium),
+            if (widget.isEnding) ...[
+              const SizedBox(height: 8),
+              const LinearProgressIndicator(),
+              const SizedBox(height: 6),
+              Text(
+                'Ending session…',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            if (!widget.isEnding && widget.error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Session warning: ${widget.error}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
             const SizedBox(height: 6),
-            Text('Ends at: ${DateFormat.Hm().format(session!.plannedEndAt)}'),
+            Text('Ends at: ${DateFormat.Hm().format(session.plannedEndAt)}'),
             Text('Remaining: $mmss'),
             const SizedBox(height: 12),
             HoldToConfirmButton(
               holdDuration: Duration(seconds: friction.holdToUnlockSeconds),
-              label: 'Hold to end session early',
+              label: cardRequired
+                  ? 'Hold, then scan card to end'
+                  : 'Hold to end session early',
               icon: Icons.stop_circle,
+              enabled: !widget.isEnding,
+              busyLabel: 'Ending…',
               onConfirmed: () async {
                 // Capture the controller before any await; `ref` can't be used after dispose.
-                final activeController =
-                    ref.read(activeFocusSessionProvider.notifier);
+                final gateController =
+                    ref.read(dumbPhoneSessionGateControllerProvider.notifier);
+                final pairedHash = ref
+                    .read(dumbPhoneSessionGateControllerProvider)
+                    .valueOrNull
+                    ?.pairedCardKeyHash;
+                final nfc = ref.read(nfcCardServiceProvider);
+
                 // Apply the configured "unlock delay" as a baseline.
                 // (Android also enforces this delay on the native blocking screen.)
                 if (friction.unlockDelaySeconds > 0) {
@@ -134,14 +217,46 @@ class _ActiveSessionCard extends ConsumerWidget {
                     Duration(seconds: friction.unlockDelaySeconds),
                   );
                 }
-                await activeController.endSession(
+
+                Future<bool> ensureCardValidated(BuildContext ctx) async {
+                  if (!cardRequired) return true;
+                  if (pairedHash == null || pairedHash.isEmpty) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                          content: Text('Pair a card to enable card-required mode.'),
+                        ),
+                      );
+                    }
+                    return false;
+                  }
+
+                  final scan = await ref
+                      .read(nfcScanServiceProvider)
+                      .scanKeyHash(ctx, purpose: NfcScanPurpose.validateEnd);
+                  if (scan == null) return false;
+
+                  final ok = nfc.constantTimeEquals(scan, pairedHash);
+                  if (!ok && ctx.mounted) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('That is not the paired card.')),
+                    );
+                  }
+                  return ok;
+                }
+
+                await gateController.endSession(
+                  context: context,
                   reason: FocusSessionEndReason.userEarlyExit,
+                  ensureCardValidated: ensureCardValidated,
                 );
               },
             ),
             const SizedBox(height: 8),
             Text(
-              'To turn this off early: open Dumb Phone Mode and hold for ${friction.holdToUnlockSeconds}s, then wait ${friction.unlockDelaySeconds}s.',
+              cardRequired
+                  ? 'To turn this off early: open Dumb Phone Mode and hold for ${friction.holdToUnlockSeconds}s, wait ${friction.unlockDelaySeconds}s, then scan your card.'
+                  : 'To turn this off early: open Dumb Phone Mode and hold for ${friction.holdToUnlockSeconds}s, then wait ${friction.unlockDelaySeconds}s.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -180,6 +295,10 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
   @override
   Widget build(BuildContext context) {
     final policies = widget.policies;
+    final startState = ref.watch(activeFocusSessionProvider);
+    final settings = ref.watch(userSettingsControllerProvider);
+    final gate = ref.watch(dumbPhoneSessionGateControllerProvider).valueOrNull;
+    final cardRequired = gate?.cardRequired == true;
     FocusPolicy? selected;
     if (_policyId != null) {
       for (final p in policies) {
@@ -226,7 +345,9 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
-              onPressed: policies.isEmpty || _policyId == null
+              onPressed: startState.isLoading
+                  ? null
+                  : policies.isEmpty || _policyId == null
                   ? () => context.go('/focus/policies')
                   : () async {
                       final policy = selected;
@@ -240,12 +361,56 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                       if (!ok) return;
                       if (!context.mounted) return;
 
-                      await ref
-                          .read(activeFocusSessionProvider.notifier)
-                          .startSession(
-                            policyId: policy.id,
-                            duration: Duration(minutes: _minutes.toInt()),
+                      final gateController = ref.read(
+                        dumbPhoneSessionGateControllerProvider.notifier,
+                      );
+                      final pairedHash = ref
+                          .read(dumbPhoneSessionGateControllerProvider)
+                          .valueOrNull
+                          ?.pairedCardKeyHash;
+                      final nfc = ref.read(nfcCardServiceProvider);
+
+                      Future<bool> ensureCardValidated(BuildContext ctx) async {
+                        if (!cardRequired) return true;
+                        if (pairedHash == null || pairedHash.isEmpty) {
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Pair a card to enable card-required mode.',
+                                ),
+                              ),
+                            );
+                          }
+                          return false;
+                        }
+
+                      final scan = await ref
+                          .read(nfcScanServiceProvider)
+                          .scanKeyHash(ctx, purpose: NfcScanPurpose.validateStart);
+                      if (scan == null) return false;
+
+                        final ok = nfc.constantTimeEquals(
+                        scan,
+                          pairedHash,
+                        );
+                        if (!ok && ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            const SnackBar(
+                              content: Text('That is not the paired card.'),
+                            ),
                           );
+                        }
+                        return ok;
+                      }
+
+                      final started = await gateController.startSession(
+                        context: context,
+                        policyId: policy.id,
+                        duration: Duration(minutes: _minutes.toInt()),
+                        ensureCardValidated: ensureCardValidated,
+                      );
+                      if (!started) return;
 
                       if (!context.mounted) return;
                       final ymd =
@@ -253,12 +418,22 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                       await ref
                           .read(todayControllerProvider(ymd).notifier)
                           .enableFocusModeAndSelectDefaultTask();
+                      if (settings.dumbPhoneAutoStart25mTimebox) {
+                        await ref
+                            .read(todayTimeboxControllerProvider(ymd).notifier)
+                            .queuePendingAutoStart25m();
+                      }
                       if (!context.mounted) return;
                       context.go('/today');
                     },
               icon: const Icon(Icons.play_arrow),
-              label:
-                  Text(policies.isEmpty ? 'Create a policy' : 'Start session'),
+              label: Text(
+                policies.isEmpty
+                    ? 'Create a policy'
+                    : cardRequired
+                        ? 'Scan card to start'
+                        : 'Start session',
+              ),
             ),
           ],
         ),

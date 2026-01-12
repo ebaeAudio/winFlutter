@@ -125,6 +125,9 @@ class _FakeEngine implements RestrictionEngine {
   }
 
   @override
+  Future<void> setCardRequired({required bool required}) async {}
+
+  @override
   Future<RestrictionPermissions> getPermissions() async {
     return const RestrictionPermissions(
       isSupported: true,

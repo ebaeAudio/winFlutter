@@ -44,4 +44,11 @@ abstract class RestrictionEngine {
 
   /// Optional: record a short emergency exception window.
   Future<void> startEmergencyException({required Duration duration});
+
+  /// Optional: inform the native layer that the current session should require
+  /// an NFC card scan to end early.
+  ///
+  /// Android uses this to disable any native early-exit controls in the blocking
+  /// screen when cardRequired is ON (no bypass).
+  Future<void> setCardRequired({required bool required});
 }

@@ -7,6 +7,8 @@ import '../../data/tasks/task_details_providers.dart';
 import '../today/today_controller.dart';
 import '../today/today_models.dart';
 import '../../ui/app_scaffold.dart';
+import '../../ui/components/reachability_fab_cluster.dart';
+import '../../ui/nav_shell.dart';
 import '../../ui/spacing.dart';
 
 class TaskDetailsScreen extends ConsumerStatefulWidget {
@@ -34,6 +36,9 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
   final _actualController = TextEditingController();
   final _subtaskAddController = TextEditingController();
 
+  final _notesKey = GlobalKey();
+  final _subtasksKey = GlobalKey();
+
   bool _loading = true;
   String? _loadError;
 
@@ -50,6 +55,17 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
   String? _saveError;
 
   bool get _hasYmd => widget.ymd.trim().isNotEmpty;
+
+  Future<void> _scrollTo(GlobalKey key) async {
+    final ctx = key.currentContext;
+    if (ctx == null) return;
+    await Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeInOutCubic,
+      alignment: 0.10,
+    );
+  }
 
   @override
   void initState() {
@@ -353,6 +369,42 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
               : const Icon(Icons.save),
         ),
       ],
+      floatingActionButton: ReachabilityFabCluster(
+        bottomBarHeight: NavShell.navBarHeight,
+        actions: [
+          ReachabilityFabAction(
+            icon: Icons.keyboard_arrow_up,
+            tooltip: 'Notes',
+            onPressed: _loading ? null : () => _scrollTo(_notesKey),
+            semanticLabel: 'Jump to notes',
+          ),
+          ReachabilityFabAction(
+            icon: Icons.list_alt,
+            tooltip: 'Subtasks',
+            onPressed: _loading ? null : () => _scrollTo(_subtasksKey),
+            semanticLabel: 'Jump to subtasks',
+          ),
+          if (task != null)
+            ReachabilityFabAction(
+              icon: task.completed ? Icons.undo : Icons.check,
+              tooltip: task.completed ? 'Mark not completed' : 'Mark completed',
+              onPressed: (_loading || _saving)
+                  ? null
+                  : () => ref
+                      .read(todayControllerProvider(ymd).notifier)
+                      .setTaskCompleted(widget.taskId, !task.completed),
+              semanticLabel:
+                  task.completed ? 'Mark task not completed' : 'Mark task completed',
+            ),
+          ReachabilityFabAction(
+            icon: Icons.save,
+            tooltip: 'Save',
+            label: 'Save',
+            isPrimary: true,
+            onPressed: (_loading || _saving) ? null : _saveDetails,
+          ),
+        ],
+      ),
       children: [
         if (_loading)
           const Card(
@@ -444,6 +496,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
           ],
           Gap.h16,
           Card(
+            key: _notesKey,
             child: Padding(
               padding: const EdgeInsets.all(AppSpace.s16),
               child: Column(
@@ -517,6 +570,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
           ),
           Gap.h16,
           Card(
+            key: _subtasksKey,
             child: Padding(
               padding: const EdgeInsets.all(AppSpace.s16),
               child: Column(

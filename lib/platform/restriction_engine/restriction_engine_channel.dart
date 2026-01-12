@@ -94,4 +94,15 @@ class MethodChannelRestrictionEngine implements RestrictionEngine {
       // No-op.
     }
   }
+
+  @override
+  Future<void> setCardRequired({required bool required}) async {
+    try {
+      await _channel.invokeMethod<void>('setCardRequired', {
+        'required': required,
+      });
+    } on MissingPluginException {
+      // No-op.
+    }
+  }
 }
