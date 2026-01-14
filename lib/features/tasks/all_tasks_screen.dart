@@ -147,6 +147,29 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
     _refresh();
   }
 
+  Future<void> _setInProgress(
+      AllTasksRepository repo, AllTask t, bool inProgress) async {
+    try {
+      await repo.setInProgress(
+        ymd: t.ymd,
+        taskId: t.id,
+        inProgress: inProgress,
+      );
+      if (!mounted) return;
+      _refresh();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(inProgress ? 'Marked in progress' : 'Cleared in progress'),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not update task.')),
+      );
+    }
+  }
+
   Future<void> _setCompletedWithSendOff(
       AllTasksRepository repo, AllTask t, bool completed) async {
     // Only animate "send off" when completing an open task (Active list UX).
@@ -398,6 +421,7 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
                           }),
                           onToggleCompleted: (t, v) =>
                               _setCompletedWithSendOff(repo, t, v),
+                          onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
                           onMoveToToday: (t) => _moveToToday(repo, t),
                           onChangeDate: (t) => _changeDate(repo, t),
                           onOpenDetails: (t) =>
@@ -419,6 +443,7 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
                             }),
                             onToggleCompleted: (t, v) =>
                                 _setCompletedWithSendOff(repo, t, v),
+                            onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
                             onMoveToToday: (t) => _moveToToday(repo, t),
                             onChangeDate: (t) => _changeDate(repo, t),
                             onOpenDetails: (t) => context
@@ -441,6 +466,7 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
                             }),
                             onToggleCompleted: (t, v) =>
                                 _setCompletedWithSendOff(repo, t, v),
+                            onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
                             onMoveToToday: null,
                             onChangeDate: (t) => _changeDate(repo, t),
                             onOpenDetails: (t) => context
@@ -463,6 +489,7 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
                             }),
                             onToggleCompleted: (t, v) =>
                                 _setCompletedWithSendOff(repo, t, v),
+                            onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
                             onMoveToToday: (t) => _moveToToday(repo, t),
                             onChangeDate: (t) => _changeDate(repo, t),
                             onOpenDetails: (t) => context
@@ -510,6 +537,7 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
                               : _selected.add(id);
                         }),
                         onToggleCompleted: (t, v) => _setCompleted(repo, t, v),
+                        onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
                         onMoveToToday: (t) => _moveToToday(repo, t),
                         onChangeDate: (t) => _changeDate(repo, t),
                         onOpenDetails: (t) =>
@@ -734,6 +762,7 @@ class _TasksListCard extends StatelessWidget {
     required this.sendOffDuration,
     required this.onToggleSelected,
     required this.onToggleCompleted,
+    required this.onToggleInProgress,
     required this.onChangeDate,
     required this.onOpenDetails,
     this.onMoveToToday,
@@ -746,6 +775,7 @@ class _TasksListCard extends StatelessWidget {
   final Duration sendOffDuration;
   final void Function(String id) onToggleSelected;
   final Future<void> Function(AllTask task, bool completed) onToggleCompleted;
+  final Future<void> Function(AllTask task, bool inProgress) onToggleInProgress;
   final Future<void> Function(AllTask task) onChangeDate;
   final void Function(AllTask task) onOpenDetails;
   final Future<void> Function(AllTask task)? onMoveToToday;
@@ -767,6 +797,31 @@ class _TasksListCard extends StatelessWidget {
     }
   }
 
+  String _dueLabel(String ymd) {
+    if (ymd.trim().isEmpty) return '';
+    try {
+      final dt = DateTime.parse(ymd);
+      return DateFormat('MMM d').format(dt);
+    } catch (_) {
+      return ymd;
+    }
+  }
+
+  bool _isOverdue({required String? goalYmd, required bool completed}) {
+    if (completed) return false;
+    final raw = (goalYmd ?? '').trim();
+    if (raw.isEmpty) return false;
+    try {
+      final goal = DateTime.parse(raw);
+      final today = DateTime.now();
+      final todayDate = DateTime(today.year, today.month, today.day);
+      final goalDate = DateTime(goal.year, goal.month, goal.day);
+      return goalDate.isBefore(todayDate);
+    } catch (_) {
+      return false;
+    }
+  }
+
   Color _typeDotColor(BuildContext context, TaskType type) {
     final scheme = Theme.of(context).colorScheme;
     return switch (type) {
@@ -777,11 +832,30 @@ class _TasksListCard extends StatelessWidget {
 
   Widget _metadata(BuildContext context, AllTask t) {
     final theme = Theme.of(context);
+    final hasDue = (t.goalYmd ?? '').trim().isNotEmpty;
+    final overdue = _isOverdue(goalYmd: t.goalYmd, completed: t.completed);
+    final dueColor =
+        overdue ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant;
     return Wrap(
       spacing: AppSpace.s8,
       runSpacing: AppSpace.s4,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
+        if (t.inProgress && !t.completed)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.timelapse, size: 16, color: theme.colorScheme.primary),
+              Gap.w8,
+              Text(
+                'In progress',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -801,6 +875,18 @@ class _TasksListCard extends StatelessWidget {
           _dateLabel(t.ymd),
           style: theme.textTheme.bodySmall,
         ),
+        if (hasDue)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.event, size: 16, color: dueColor),
+              Gap.w8,
+              Text(
+                'Due ${_dueLabel(t.goalYmd!)}',
+                style: theme.textTheme.bodySmall?.copyWith(color: dueColor),
+              ),
+            ],
+          ),
       ],
     );
   }
@@ -855,6 +941,9 @@ class _TasksListCard extends StatelessWidget {
                               case 'details':
                                 onOpenDetails(t);
                                 break;
+                              case 'progress':
+                                await onToggleInProgress(t, !t.inProgress);
+                                break;
                               case 'today':
                                 final f = onMoveToToday;
                                 if (f != null) await f(t);
@@ -867,6 +956,14 @@ class _TasksListCard extends StatelessWidget {
                           itemBuilder: (context) => [
                             const PopupMenuItem(
                                 value: 'details', child: Text('Details')),
+                            PopupMenuItem(
+                              value: 'progress',
+                              child: Text(
+                                t.inProgress
+                                    ? 'Clear in progress'
+                                    : 'Mark in progress',
+                              ),
+                            ),
                             const PopupMenuDivider(),
                             if (onMoveToToday != null)
                               const PopupMenuItem(

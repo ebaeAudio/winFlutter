@@ -29,8 +29,10 @@ class TodayTask {
     required this.title,
     required this.type,
     required this.completed,
+    required this.inProgress,
     required this.createdAtMs,
     this.details,
+    this.goalYmd,
     this.notes,
     this.starterStep,
     this.estimatedMinutes,
@@ -44,8 +46,10 @@ class TodayTask {
   final String title;
   final TodayTaskType type;
   final bool completed;
+  final bool inProgress;
   final int createdAtMs;
   final String? details;
+  final String? goalYmd;
   final String? notes;
 
   /// Focus v2: micro-step scaffolding for task initiation.
@@ -66,7 +70,9 @@ class TodayTask {
     String? title,
     TodayTaskType? type,
     bool? completed,
+    bool? inProgress,
     String? details,
+    Object? goalYmd = _todayTaskUnset,
     String? notes,
     String? starterStep,
     int? estimatedMinutes,
@@ -83,8 +89,10 @@ class TodayTask {
       title: title ?? this.title,
       type: type ?? this.type,
       completed: completed ?? this.completed,
+      inProgress: inProgress ?? this.inProgress,
       createdAtMs: createdAtMs,
       details: details ?? this.details,
+      goalYmd: goalYmd == _todayTaskUnset ? this.goalYmd : goalYmd as String?,
       notes: notes ?? this.notes,
       starterStep: resolvedStarterStep,
       estimatedMinutes: resolvedEstimatedMinutes,
@@ -101,8 +109,10 @@ class TodayTask {
         'title': title,
         'type': type.name,
         'completed': completed,
+        'inProgress': inProgress,
         'createdAtMs': createdAtMs,
         if (details != null) 'details': details,
+        if (goalYmd != null) 'goalYmd': goalYmd,
         if (notes != null) 'notes': notes,
         // Focus v2 canonical keys
         if (starterStep != null) 'starterStep': starterStep,
@@ -140,8 +150,10 @@ class TodayTask {
       type: TodayTaskType.fromString(
           (json['type'] as String?) ?? TodayTaskType.mustWin.name),
       completed: (json['completed'] as bool?) ?? false,
+      inProgress: (json['inProgress'] as bool?) ?? false,
       createdAtMs: (json['createdAtMs'] as num?)?.toInt() ?? 0,
       details: (json['details'] as String?) ?? (json['notes'] as String?),
+      goalYmd: (json['goalYmd'] as String?),
       notes: (json['notes'] as String?),
       starterStep: starterStep,
       estimatedMinutes: estimatedMinutes,
@@ -153,6 +165,12 @@ class TodayTask {
     );
   }
 }
+
+class _TodayTaskUnset {
+  const _TodayTaskUnset();
+}
+
+const _todayTaskUnset = _TodayTaskUnset();
 
 class TodaySubtask {
   const TodaySubtask({

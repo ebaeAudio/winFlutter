@@ -29,7 +29,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    test('build defaults cardRequired=false when no paired card exists',
+    test('build defaults requireCardToEndEarly=false when no paired card exists',
         () async {
       final prefs = await SharedPreferences.getInstance();
       final container = ProviderContainer(
@@ -45,11 +45,13 @@ void main() {
           .read(dumbPhoneSessionGateControllerProvider.future);
 
       expect(state.hasPairedCard, false);
-      expect(state.cardRequired, false);
+      expect(state.requireCardToEndEarly, false);
+      expect(state.requireCardToStart, false);
       expect(engine.lastCardRequired, false);
     });
 
-    test('build defaults cardRequired=true when a paired card exists', () async {
+    test('build defaults requireCardToEndEarly=false when a paired card exists',
+        () async {
       secureStore['dumb_phone_paired_card_key_hash_v1'] = 'hash1';
 
       final prefs = await SharedPreferences.getInstance();
@@ -67,16 +69,23 @@ void main() {
 
       expect(state.hasPairedCard, true);
       expect(state.pairedCardKeyHash, 'hash1');
-      expect(state.cardRequired, true);
-      expect(prefs.getBool('settings_dumb_phone_card_required_v1'), true);
-      expect(engine.lastCardRequired, true);
+      expect(state.requireCardToEndEarly, false);
+      expect(state.requireCardToStart, false);
+      expect(
+        prefs.getBool('settings_dumb_phone_require_card_to_end_early_v1'),
+        false,
+      );
+      expect(engine.lastCardRequired, false);
     });
 
     test(
-        'build enforces safety: if paired card missing, cardRequired cannot remain ON',
+        'build enforces safety: if paired card missing, requireCardToEndEarly cannot remain ON',
         () async {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('settings_dumb_phone_card_required_v1', true);
+      await prefs.setBool(
+        'settings_dumb_phone_require_card_to_end_early_v1',
+        true,
+      );
 
       final container = ProviderContainer(
         overrides: [
@@ -91,12 +100,44 @@ void main() {
           .read(dumbPhoneSessionGateControllerProvider.future);
 
       expect(state.hasPairedCard, false);
-      expect(state.cardRequired, false);
-      expect(prefs.getBool('settings_dumb_phone_card_required_v1'), false);
+      expect(state.requireCardToEndEarly, false);
+      expect(
+        prefs.getBool('settings_dumb_phone_require_card_to_end_early_v1'),
+        false,
+      );
       expect(engine.lastCardRequired, false);
     });
 
-    test('savePairedCardHash persists hash and turns cardRequired ON', () async {
+    test('migrates legacy cardRequired=true -> requireCardToEndEarly=true',
+        () async {
+      secureStore['dumb_phone_paired_card_key_hash_v1'] = 'hash1';
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('settings_dumb_phone_card_required_v1', true);
+      final container = ProviderContainer(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          restrictionEngineProvider.overrideWithValue(engine),
+          focusSessionRepositoryProvider.overrideWithValue(_MemSessionRepo()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final state = await container
+          .read(dumbPhoneSessionGateControllerProvider.future);
+
+      expect(state.hasPairedCard, true);
+      expect(state.requireCardToEndEarly, true);
+      expect(state.requireCardToStart, false);
+      expect(
+        prefs.getBool('settings_dumb_phone_require_card_to_end_early_v1'),
+        true,
+      );
+      expect(engine.lastCardRequired, true);
+    });
+
+    test('savePairedCardHash persists hash and does not auto-enable setting',
+        () async {
       final prefs = await SharedPreferences.getInstance();
       final container = ProviderContainer(
         overrides: [
@@ -118,16 +159,25 @@ void main() {
           .valueOrNull;
       expect(next?.hasPairedCard, true);
       expect(next?.pairedCardKeyHash, 'hash1');
-      expect(next?.cardRequired, true);
+      expect(next?.requireCardToEndEarly, false);
+      expect(next?.requireCardToStart, false);
       expect(secureStore['dumb_phone_paired_card_key_hash_v1'], 'hash1');
-      expect(prefs.getBool('settings_dumb_phone_card_required_v1'), true);
-      expect(engine.lastCardRequired, true);
+      expect(
+        prefs.getBool('settings_dumb_phone_require_card_to_end_early_v1'),
+        false,
+      );
+      expect(engine.lastCardRequired, false);
     });
 
-    test('unpairCard removes hash and forces cardRequired OFF', () async {
+    test('unpairCard removes hash and forces requireCardToEndEarly OFF',
+        () async {
       secureStore['dumb_phone_paired_card_key_hash_v1'] = 'hash1';
 
       final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(
+        'settings_dumb_phone_require_card_to_end_early_v1',
+        true,
+      );
       final container = ProviderContainer(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
@@ -148,14 +198,18 @@ void main() {
           .valueOrNull;
       expect(next?.hasPairedCard, false);
       expect(next?.pairedCardKeyHash, isNull);
-      expect(next?.cardRequired, false);
+      expect(next?.requireCardToEndEarly, false);
+      expect(next?.requireCardToStart, false);
       expect(secureStore.containsKey('dumb_phone_paired_card_key_hash_v1'), false);
-      expect(prefs.getBool('settings_dumb_phone_card_required_v1'), false);
+      expect(
+        prefs.getBool('settings_dumb_phone_require_card_to_end_early_v1'),
+        false,
+      );
       expect(engine.lastCardRequired, false);
     });
 
     testWidgets(
-        'setCardRequired(true) without a paired card shows snackbar and keeps it OFF',
+        'setRequireCardToEndEarly(true) without a paired card shows snackbar and keeps it OFF',
         (tester) async {
       final prefs = await SharedPreferences.getInstance();
       final container = ProviderContainer(
@@ -176,19 +230,19 @@ void main() {
         ),
       );
 
-      // Ensure controller has built.
-      await container.read(dumbPhoneSessionGateControllerProvider.future);
-
       final ctx = tester.element(find.byType(Scaffold));
       await container
           .read(dumbPhoneSessionGateControllerProvider.notifier)
-          .setCardRequired(ctx, true);
+          .setRequireCardToEndEarly(ctx, true);
       // Avoid pumpAndSettle here; SnackBar duration timers can make it flaky.
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));
 
       expect(find.text('Pair a card to enable this setting.'), findsOneWidget);
-      expect(prefs.getBool('settings_dumb_phone_card_required_v1'), false);
+      expect(
+        prefs.getBool('settings_dumb_phone_require_card_to_end_early_v1'),
+        false,
+      );
       expect(engine.lastCardRequired, false);
     });
   });

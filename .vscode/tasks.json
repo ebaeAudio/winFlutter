@@ -1,0 +1,34 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Flutter: pub get",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["pub", "get"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Flutter: run macOS (no debug)",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["run", "-d", "macos"],
+      "problemMatcher": []
+    },
+    {
+      "label": "Flutter: run iOS simulator (no debug)",
+      "type": "shell",
+      "command": "flutter",
+      "args": ["run", "-d", "C81EBC4D-97D9-4069-BD18-0443B7ED2AF2"],
+      "problemMatcher": []
+    },
+    {
+      "label": "iOS: pod install",
+      "type": "shell",
+      "command": "bash",
+      "args": ["-lc", "cd ios && pod install"],
+      "problemMatcher": []
+    }
+  ]
+}
+

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/auth_screen.dart';
+import '../features/auth/password_recovery_screen.dart';
 import '../features/focus/ui/focus_entry_screen.dart';
 import '../features/focus/ui/focus_history_screen.dart';
 import '../features/focus/ui/focus_policies_screen.dart';
@@ -13,6 +14,7 @@ import '../features/settings/trackers/tracker_editor_screen.dart';
 import '../features/settings/trackers/trackers_screen.dart';
 import '../features/setup/setup_screen.dart';
 import '../features/feedback/feedback_screen.dart';
+import '../features/pitch/pitch_page.dart';
 import '../features/tasks/all_tasks_screen.dart';
 import '../features/today/today_screen.dart';
 import '../features/tasks/task_details_screen.dart';
@@ -50,15 +52,24 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isSignedIn = auth?.isSignedIn == true;
       final needsSetup = auth?.needsSetup == true;
+      final needsPasswordReset = auth?.needsPasswordReset == true;
 
       final goingToAuth = state.matchedLocation == '/auth';
       final goingToSetup = state.matchedLocation == '/setup';
+      final goingToPasswordRecovery = state.matchedLocation == '/auth/recovery';
 
       if (needsSetup) {
         return goingToSetup ? null : '/setup';
       }
 
+      if (needsPasswordReset) {
+        return goingToPasswordRecovery ? null : '/auth/recovery';
+      }
+
       if (!isSignedIn) {
+        // Allow the recovery route to show a helpful "invalid/expired link"
+        // state even if a session couldn't be established.
+        if (goingToPasswordRecovery) return null;
         if (goingToAuth) return null;
         final next = Uri.encodeComponent(state.uri.toString());
         return '/auth?next=$next';
@@ -82,6 +93,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => AuthScreen(
           next: state.uri.queryParameters['next'],
         ),
+      ),
+      GoRoute(
+        path: '/auth/recovery',
+        builder: (context, state) => const PasswordRecoveryScreen(),
       ),
       GoRoute(
         // Legacy URLs (keep for safety): redirect /home/* -> /* while preserving query params.
@@ -193,6 +208,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                     builder: (context, state) => FeedbackScreen(
                       entryPoint: state.uri.queryParameters['entryPoint'],
                     ),
+                  ),
+                  GoRoute(
+                    path: 'pitch',
+                    builder: (context, state) => const PitchPage(),
                   ),
                 ],
               ),

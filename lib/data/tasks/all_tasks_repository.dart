@@ -9,6 +9,12 @@ abstract interface class AllTasksRepository {
     required bool completed,
   });
 
+  Future<void> setInProgress({
+    required String ymd,
+    required String taskId,
+    required bool inProgress,
+  });
+
   Future<void> moveToDate({
     required String fromYmd,
     required String toYmd,

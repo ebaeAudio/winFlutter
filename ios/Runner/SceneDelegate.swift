@@ -24,5 +24,25 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
       RestrictionEnginePlugin.register(with: registrar)
     }
   }
+
+  // Forward deep links to Flutter plugins when using a SceneDelegate.
+  // (Many plugins register as UIApplicationDelegates and won't receive
+  // scene(_:openURLContexts:) automatically.)
+  func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    guard let url = URLContexts.first?.url else { return }
+    _ = UIApplication.shared.delegate?.application?(
+      UIApplication.shared,
+      open: url,
+      options: [:]
+    )
+  }
+
+  func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+    _ = UIApplication.shared.delegate?.application?(
+      UIApplication.shared,
+      continue: userActivity,
+      restorationHandler: { _ in }
+    )
+  }
 }
 

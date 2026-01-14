@@ -44,8 +44,18 @@ class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
   /// no navigation on failure or cancel.
   Future<bool> startSession({
     required String policyId,
-    required Duration duration,
+    Duration? duration,
+    DateTime? endsAt,
   }) async {
+    final hasDuration = duration != null;
+    final hasEndsAt = endsAt != null;
+    if (hasDuration == hasEndsAt) {
+      // Must provide exactly one.
+      throw ArgumentError(
+        'Provide exactly one of duration or endsAt.',
+      );
+    }
+
     final active = state.valueOrNull;
     if (active != null && active.isActive) return false;
 
@@ -57,12 +67,16 @@ class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
       }
 
       final now = DateTime.now();
+      final plannedEndAt = endsAt ?? now.add(duration!);
+      if (!plannedEndAt.isAfter(now)) {
+        throw StateError('End time must be in the future.');
+      }
       final id = '${now.microsecondsSinceEpoch}_${Random().nextInt(1 << 20)}';
       final session = FocusSession(
         id: id,
         policyId: policy.id,
         startedAt: now,
-        plannedEndAt: now.add(duration),
+        plannedEndAt: plannedEndAt,
         status: FocusSessionStatus.active,
         emergencyUnlocksUsed: 0,
       );

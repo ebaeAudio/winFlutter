@@ -22,10 +22,23 @@
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>winflutter.auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>winflutter</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NFCReaderUsageDescription</key>
+	<string>Win The Year uses NFC to scan your paired card to start/end Dumb Phone Mode.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_dartobservatory._tcp</string>
@@ -36,12 +49,8 @@
 	<string>Allow local network access to enable Flutter debugging and connect to the Dart VM service during development.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Win The Year uses the microphone so you can speak tasks, habits, and reflections hands-free.</string>
-	<key>NFCReaderUsageDescription</key>
-	<string>Win The Year uses NFC to scan your paired card to start/end Dumb Phone Mode.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Win The Year uses speech recognition to turn what you say into tasks, habits, and reflections.</string>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -61,6 +70,8 @@
 			</array>
 		</dict>
 	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

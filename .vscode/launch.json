@@ -2,26 +2,56 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Flutter: Debug (device)",
+      "name": "Flutter: macOS",
       "request": "launch",
       "type": "dart",
-      "program": "lib/main.dart"
-    },
-    {
-      "name": "Flutter: Debug (Chrome)",
-      "request": "launch",
-      "type": "dart",
+      "deviceId": "macos",
       "program": "lib/main.dart",
-      "args": ["-d", "chrome"]
+      "preLaunchTask": "Flutter: pub get"
     },
     {
-      "name": "Flutter: Profile (device)",
+      "name": "Flutter: macOS (Profile)",
       "request": "launch",
       "type": "dart",
       "flutterMode": "profile",
-      "program": "lib/main.dart"
+      "deviceId": "macos",
+      "program": "lib/main.dart",
+      "preLaunchTask": "Flutter: pub get"
+    },
+    {
+      "name": "Flutter: macOS (Release)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "release",
+      "deviceId": "macos",
+      "program": "lib/main.dart",
+      "preLaunchTask": "Flutter: pub get"
+    },
+    {
+      "name": "Flutter (iOS Simulator - iPhone 16e)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "debug",
+      "args": ["-d", "C81EBC4D-97D9-4069-BD18-0443B7ED2AF2"],
+      "preLaunchTask": "Flutter: pub get"
+    },
+    {
+      "name": "Flutter (iOS Device - Evan's iPhone)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "debug",
+      "args": ["-d", "00008120-000628DC01F0201E"],
+      "preLaunchTask": "Flutter: pub get"
+    },
+    {
+      "name": "Flutter (Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["-d", "chrome"],
+      "preLaunchTask": "Flutter: pub get"
     }
   ]
 }
-
-

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,7 +16,8 @@ class DumbPhoneSessionGateState {
     required this.sessionActive,
     required this.sessionStartedAt,
     required this.pairedCardKeyHash,
-    required this.cardRequired,
+    required this.requireCardToEndEarly,
+    required this.requireCardToStart,
   });
 
   final bool sessionActive;
@@ -25,7 +28,14 @@ class DumbPhoneSessionGateState {
   /// We store only the hash, never the raw tag data (NDEF contents or UID).
   final String? pairedCardKeyHash;
 
-  final bool cardRequired;
+  /// Optional friction: when ON, ending a session early requires scanning the
+  /// paired card. Normal timer completion still ends automatically.
+  final bool requireCardToEndEarly;
+
+  /// (Future) Require scanning the paired card to start a session.
+  ///
+  /// v1: always false; start remains software-driven via UI.
+  final bool requireCardToStart;
 
   bool get hasPairedCard => pairedCardKeyHash != null && pairedCardKeyHash!.isNotEmpty;
 
@@ -33,7 +43,8 @@ class DumbPhoneSessionGateState {
     bool? sessionActive,
     Object? sessionStartedAt = _unset,
     Object? pairedCardKeyHash = _unset,
-    bool? cardRequired,
+    bool? requireCardToEndEarly,
+    bool? requireCardToStart,
   }) {
     return DumbPhoneSessionGateState(
       sessionActive: sessionActive ?? this.sessionActive,
@@ -43,7 +54,8 @@ class DumbPhoneSessionGateState {
       pairedCardKeyHash: (pairedCardKeyHash == _unset)
           ? this.pairedCardKeyHash
           : pairedCardKeyHash as String?,
-      cardRequired: cardRequired ?? this.cardRequired,
+      requireCardToEndEarly: requireCardToEndEarly ?? this.requireCardToEndEarly,
+      requireCardToStart: requireCardToStart ?? this.requireCardToStart,
     );
   }
 }
@@ -51,7 +63,9 @@ class DumbPhoneSessionGateState {
 const Object _unset = Object();
 
 final _secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
-  return const FlutterSecureStorage();
+  // Intentionally non-const so widget/unit tests can replace
+  // `FlutterSecureStoragePlatform.instance` before the first instance is created.
+  return FlutterSecureStorage();
 });
 
 final dumbPhoneSessionGateControllerProvider = AsyncNotifierProvider<
@@ -61,7 +75,15 @@ final dumbPhoneSessionGateControllerProvider = AsyncNotifierProvider<
 
 class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateState> {
   static const _kPairedCardKeyHash = 'dumb_phone_paired_card_key_hash_v1';
-  static const _kCardRequired = 'settings_dumb_phone_card_required_v1';
+  // New split flags (v1 for this split).
+  static const _kRequireCardToEndEarly =
+      'settings_dumb_phone_require_card_to_end_early_v1';
+  static const _kRequireCardToStart =
+      'settings_dumb_phone_require_card_to_start_v1';
+
+  // Legacy combined flag (start + end).
+  // Migration rule: legacy=true -> requireCardToEndEarly=true, requireCardToStart=false.
+  static const _kLegacyCardRequired = 'settings_dumb_phone_card_required_v1';
 
   FlutterSecureStorage get _secure => ref.read(_secureStorageProvider);
 
@@ -73,38 +95,67 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
     final session = ref.watch(activeFocusSessionProvider).valueOrNull;
     final pairedHash = await _secure.read(key: _kPairedCardKeyHash);
 
-    final stored = prefs.getBool(_kCardRequired);
-    var cardRequired = stored ?? (pairedHash != null && pairedHash.isNotEmpty);
+    // v1 default: OFF (optional friction).
+    // If upgrading from a legacy combined flag, map it to end-early only.
+    final storedEnd = prefs.getBool(_kRequireCardToEndEarly);
+    final storedStart = prefs.getBool(_kRequireCardToStart);
 
-    // Persist the derived default so it survives restarts.
-    if (stored == null) {
-      await prefs.setBool(_kCardRequired, cardRequired);
+    bool requireEndEarly;
+    if (storedEnd != null) {
+      requireEndEarly = storedEnd;
+    } else {
+      final legacy = prefs.getBool(_kLegacyCardRequired);
+      requireEndEarly = legacy ?? false;
+      // Best-effort persistence; don't block provider initialization.
+      unawaited(prefs.setBool(_kRequireCardToEndEarly, requireEndEarly));
     }
 
-    // Safety rule: if the card is missing, cardRequired cannot be ON.
+    // v1: never require card to start.
+    final requireStart = storedStart ?? false;
+    if (storedStart == null) {
+      // Best-effort persistence; don't block provider initialization.
+      unawaited(prefs.setBool(_kRequireCardToStart, false));
+    }
+
+    // Safety rule: if the card is missing, requireEndEarly cannot be ON.
     if (pairedHash == null || pairedHash.isEmpty) {
-      if (cardRequired) {
-        cardRequired = false;
-        await prefs.setBool(_kCardRequired, false);
+      if (requireEndEarly) {
+        requireEndEarly = false;
+        // Best-effort persistence; don't block provider initialization.
+        unawaited(prefs.setBool(_kRequireCardToEndEarly, false));
       }
     }
 
-    // Inform native layers (Android blocking screen) to disable any bypass paths.
-    await engine.setCardRequired(required: cardRequired);
+    // Inform native layers (Android blocking screen) to disable any native bypass
+    // controls when end-early card friction is ON.
+    unawaited(engine.setCardRequired(required: requireEndEarly));
 
     return DumbPhoneSessionGateState(
       sessionActive: session?.isActive == true,
       sessionStartedAt: session?.startedAt,
       pairedCardKeyHash: pairedHash,
-      cardRequired: cardRequired,
+      requireCardToEndEarly: requireEndEarly,
+      requireCardToStart: requireStart,
     );
   }
 
-  Future<void> setCardRequired(BuildContext context, bool enabled) async {
+  Future<void> setRequireCardToEndEarly(BuildContext context, bool enabled) async {
     final prefs = ref.read(sharedPreferencesProvider);
     final engine = ref.read(restrictionEngineProvider);
     final current = state.valueOrNull;
     final hasPaired = current?.hasPairedCard == true;
+    final sessionActive = current?.sessionActive == true;
+
+    if (sessionActive) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You can change this after the current session ends.'),
+          ),
+        );
+      }
+      return;
+    }
 
     if (enabled && !hasPaired) {
       if (context.mounted) {
@@ -112,22 +163,26 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
           const SnackBar(content: Text('Pair a card to enable this setting.')),
         );
       }
-      await prefs.setBool(_kCardRequired, false);
+      await prefs.setBool(_kRequireCardToEndEarly, false);
       await engine.setCardRequired(required: false);
-      state = AsyncData((current ?? const DumbPhoneSessionGateState(
-        sessionActive: false,
-        sessionStartedAt: null,
-        pairedCardKeyHash: null,
-        cardRequired: false,
-      ))
-          .copyWith(cardRequired: false));
+      state = AsyncData(
+        (current ??
+                const DumbPhoneSessionGateState(
+                  sessionActive: false,
+                  sessionStartedAt: null,
+                  pairedCardKeyHash: null,
+                  requireCardToEndEarly: false,
+                  requireCardToStart: false,
+                ))
+            .copyWith(requireCardToEndEarly: false),
+      );
       return;
     }
 
-    await prefs.setBool(_kCardRequired, enabled);
+    await prefs.setBool(_kRequireCardToEndEarly, enabled);
     await engine.setCardRequired(required: enabled);
     if (current != null) {
-      state = AsyncData(current.copyWith(cardRequired: enabled));
+      state = AsyncData(current.copyWith(requireCardToEndEarly: enabled));
     } else {
       ref.invalidateSelf();
     }
@@ -136,20 +191,20 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
   /// Remove the paired card hash from secure storage.
   ///
   /// Caller owns confirmation UI. This method enforces the edge case:
-  /// if cardRequired was ON, it is automatically turned OFF.
+  /// if requireCardToEndEarly was ON, it is automatically turned OFF.
   Future<void> unpairCard() async {
     final prefs = ref.read(sharedPreferencesProvider);
     final engine = ref.read(restrictionEngineProvider);
     await _secure.delete(key: _kPairedCardKeyHash);
 
     // If the requirement was enabled, automatically disable it.
-    await prefs.setBool(_kCardRequired, false);
+    await prefs.setBool(_kRequireCardToEndEarly, false);
     await engine.setCardRequired(required: false);
 
     final current = state.valueOrNull;
     if (current != null) {
       state = AsyncData(
-        current.copyWith(pairedCardKeyHash: null, cardRequired: false),
+        current.copyWith(pairedCardKeyHash: null, requireCardToEndEarly: false),
       );
     } else {
       ref.invalidateSelf();
@@ -161,17 +216,23 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
   /// Caller owns the pairing scan flow and any UI.
   Future<void> savePairedCardHash(String hash) async {
     final prefs = ref.read(sharedPreferencesProvider);
-    final engine = ref.read(restrictionEngineProvider);
     await _secure.write(key: _kPairedCardKeyHash, value: hash);
 
-    // Secure default: once paired, require the card unless user explicitly turns it off.
-    await prefs.setBool(_kCardRequired, true);
-    await engine.setCardRequired(required: true);
+    // v1: default is OFF. Pairing only enables the *ability* to turn the setting ON.
+    // If the user already enabled it, keep it enabled through replace.
+    final requireEndEarly =
+        prefs.getBool(_kRequireCardToEndEarly) ??
+        prefs.getBool(_kLegacyCardRequired) ??
+        false;
+    await prefs.setBool(_kRequireCardToEndEarly, requireEndEarly);
 
     final current = state.valueOrNull;
     if (current != null) {
       state = AsyncData(
-        current.copyWith(pairedCardKeyHash: hash, cardRequired: true),
+        current.copyWith(
+          pairedCardKeyHash: hash,
+          requireCardToEndEarly: requireEndEarly,
+        ),
       );
     } else {
       ref.invalidateSelf();
@@ -181,18 +242,13 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
   Future<bool> startSession({
     required BuildContext context,
     required String policyId,
-    required Duration duration,
-    required Future<bool> Function(BuildContext context) ensureCardValidated,
+    Duration? duration,
+    DateTime? endsAt,
   }) async {
-    final current = state.valueOrNull;
-    if (current?.cardRequired == true) {
-      final ok = await ensureCardValidated(context);
-      if (!ok) return false;
-    }
-
     return await ref.read(activeFocusSessionProvider.notifier).startSession(
           policyId: policyId,
           duration: duration,
+          endsAt: endsAt,
         );
   }
 
@@ -202,7 +258,8 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
     required Future<bool> Function(BuildContext context) ensureCardValidated,
   }) async {
     final current = state.valueOrNull;
-    if (current?.cardRequired == true) {
+    if (current?.requireCardToEndEarly == true &&
+        reason == FocusSessionEndReason.userEarlyExit) {
       final ok = await ensureCardValidated(context);
       if (!ok) return;
     }

@@ -9,7 +9,9 @@ AllTask _t({
   required String title,
   required TaskType type,
   required String ymd,
+  String? goalYmd,
   required bool completed,
+  bool inProgress = false,
   required int createdAtMs,
 }) {
   return AllTask(
@@ -17,7 +19,9 @@ AllTask _t({
     title: title,
     type: type,
     ymd: ymd,
+    goalYmd: goalYmd,
     completed: completed,
+    inProgress: inProgress,
     createdAtMs: createdAtMs,
   );
 }
@@ -44,7 +48,7 @@ void main() {
       ),
     ];
 
-    final query = AllTasksQuery(
+    const query = AllTasksQuery(
       status: AllTasksStatusFilter.open,
       types: {TaskType.mustWin},
       searchQuery: 'rent',
@@ -86,7 +90,7 @@ void main() {
       ),
     ];
 
-    final base = AllTasksQuery(
+    const base = AllTasksQuery(
       status: AllTasksStatusFilter.all,
       types: {TaskType.mustWin, TaskType.niceToDo},
       searchQuery: '',
@@ -144,7 +148,7 @@ void main() {
       ),
     ];
 
-    final base = AllTasksQuery(
+    const base = AllTasksQuery(
       status: AllTasksStatusFilter.all,
       types: {TaskType.mustWin, TaskType.niceToDo},
       searchQuery: '',

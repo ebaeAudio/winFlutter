@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import 'env.dart';
 import 'supabase.dart';
@@ -20,23 +20,29 @@ final authStateProvider = StreamProvider<AuthState>((ref) {
     return Stream<AuthState>.value(const AuthState.signedOut(needsSetup: true));
   }
 
-  final client = Supabase.instance.client;
+  final client = sb.Supabase.instance.client;
   final controller = StreamController<AuthState>();
 
-  void emitFromSession(Session? session) {
+  void emit({required sb.Session? session, required bool needsPasswordReset}) {
     if (session == null) {
       controller.add(const AuthState.signedOut(needsSetup: false));
-    } else {
-      controller
-          .add(AuthState.signedIn(isDemo: false, email: session.user.email));
+      return;
     }
+    controller.add(
+      AuthState.signedIn(
+        isDemo: false,
+        email: session.user.email,
+        needsPasswordReset: needsPasswordReset,
+      ),
+    );
   }
 
   // Emit current session immediately.
-  emitFromSession(client.auth.currentSession);
+  emit(session: client.auth.currentSession, needsPasswordReset: false);
 
   final sub = client.auth.onAuthStateChange.listen((data) {
-    emitFromSession(data.session);
+    final needsPasswordReset = data.event == sb.AuthChangeEvent.passwordRecovery;
+    emit(session: data.session, needsPasswordReset: needsPasswordReset);
   });
 
   ref.onDispose(() async {
@@ -53,19 +59,26 @@ class AuthState {
     required this.isDemo,
     required this.needsSetup,
     required this.email,
+    required this.needsPasswordReset,
   });
 
   final bool isSignedIn;
   final bool isDemo;
   final bool needsSetup;
   final String? email;
+  final bool needsPasswordReset;
 
-  const AuthState.signedIn({required bool isDemo, String? email})
+  const AuthState.signedIn({
+    required bool isDemo,
+    String? email,
+    bool needsPasswordReset = false,
+  })
       : this._(
           isSignedIn: true,
           isDemo: isDemo,
           needsSetup: false,
           email: email,
+          needsPasswordReset: needsPasswordReset,
         );
 
   const AuthState.signedOut({required bool needsSetup})
@@ -74,5 +87,6 @@ class AuthState {
           isDemo: false,
           needsSetup: needsSetup,
           email: null,
+          needsPasswordReset: false,
         );
 }

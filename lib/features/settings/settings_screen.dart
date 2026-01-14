@@ -9,6 +9,8 @@ import '../../app/errors.dart';
 import '../../app/supabase.dart';
 import '../../app/theme.dart';
 import '../../app/user_settings.dart';
+import 'integrations/linear_integration_sheet.dart';
+import '../../app/linear_integration_controller.dart';
 import '../focus/dumb_phone_session_gate_controller.dart';
 import '../../platform/nfc/nfc_card_service.dart';
 import '../../platform/nfc/nfc_scan_purpose.dart';
@@ -16,9 +18,19 @@ import '../../platform/nfc/nfc_scan_service.dart';
 import '../../ui/app_scaffold.dart';
 import '../../ui/components/section_header.dart';
 import '../../ui/spacing.dart';
+import '../pitch/pitch_content.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
+
+  Future<void> _openLinearSheet(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => const LinearIntegrationSheet(),
+    );
+  }
 
   Future<void> _confirmAndSignOut(
     BuildContext context, {
@@ -67,13 +79,15 @@ class SettingsScreen extends ConsumerWidget {
     final env = ref.watch(envProvider);
     final themeSettings = ref.watch(themeControllerProvider);
     final userSettings = ref.watch(userSettingsControllerProvider);
+    final linear = ref.watch(linearIntegrationControllerProvider).valueOrNull;
     final dumbPhoneGate = ref.watch(dumbPhoneSessionGateControllerProvider);
     final supabase = ref.watch(supabaseProvider);
     final client = supabase.client;
 
     final gate = dumbPhoneGate.valueOrNull;
     final hasPairedCard = gate?.hasPairedCard == true;
-    final cardRequired = hasPairedCard ? (gate?.cardRequired == true) : false;
+    final requireCardToEndEarly =
+        hasPairedCard ? (gate?.requireCardToEndEarly == true) : false;
     final sessionActive = gate?.sessionActive == true;
 
     return AppScaffold(
@@ -124,6 +138,28 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ),
         Gap.h16,
+        const SectionHeader(title: 'Integrations'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.s8),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.link),
+                  title: const Text('Linear'),
+                  subtitle: Text(
+                    linear?.hasApiKey == true
+                        ? 'Connected (API key saved)'
+                        : 'Add a personal API key to enable sync',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _openLinearSheet(context),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Gap.h16,
         const SectionHeader(title: 'Dumb Phone Mode'),
         Card(
           child: Padding(
@@ -142,22 +178,22 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 const Divider(height: 1),
                 SwitchListTile.adaptive(
-                  title: const Text('Require NFC card to start/end'),
+                  title: const Text('Require NFC card to end early'),
                   subtitle: Text(
                     !hasPairedCard
                         ? 'Pair a card to enable.'
                         : sessionActive
                             ? 'You can change this after the current session ends.'
-                            : 'When enabled, you must scan your paired card to start and end Dumb Phone Mode.',
+                            : 'When enabled, ending early requires scanning your paired card.',
                   ),
-                  value: cardRequired,
+                  value: requireCardToEndEarly,
                   onChanged: (!hasPairedCard ||
                           sessionActive ||
                           dumbPhoneGate.isLoading)
                       ? null
                       : (v) => ref
                           .read(dumbPhoneSessionGateControllerProvider.notifier)
-                          .setCardRequired(context, v),
+                          .setRequireCardToEndEarly(context, v),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -167,7 +203,7 @@ class SettingsScreen extends ConsumerWidget {
                   subtitle: Text(
                     hasPairedCard
                         ? 'You can replace or unpair your card.'
-                        : 'Optional: require a card scan to start/end.',
+                        : 'Pair a card to enable “Require NFC card to end early”.',
                   ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: dumbPhoneGate.isLoading
@@ -248,7 +284,7 @@ class SettingsScreen extends ConsumerWidget {
                           }
 
                           if (action == 'unpair') {
-                            if (current?.cardRequired == true) {
+                            if (current?.requireCardToEndEarly == true) {
                               final ok = await verifyCurrentCard();
                               if (!ok) return;
                             } else {
@@ -289,7 +325,7 @@ class SettingsScreen extends ConsumerWidget {
                           }
 
                           if (action == 'replace') {
-                            if (current?.cardRequired == true) {
+                            if (current?.requireCardToEndEarly == true) {
                               final ok = await verifyCurrentCard();
                               if (!ok) return;
                             }
@@ -466,6 +502,14 @@ class SettingsScreen extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: AppSpace.s8),
             child: Column(
               children: [
+                ListTile(
+                  leading: const Icon(Icons.info_outline),
+                  title: Text(pitchContent.navEntry.title),
+                  subtitle: Text(pitchContent.navEntry.subtitle),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.go('/settings/pitch'),
+                ),
+                const Divider(height: 1),
                 ListTile(
                   leading: const Icon(Icons.feedback_outlined),
                   title: const Text('Send feedback'),

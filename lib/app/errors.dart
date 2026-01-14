@@ -5,6 +5,11 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 ///
 /// Keep this small and boring; it’s used in UI.
 String friendlyError(Object error) {
+  if (error is StateError) {
+    final msg = error.message.toString().trim();
+    if (msg.isNotEmpty) return msg;
+  }
+
   if (error is AuthException) {
     final msg = error.message.toLowerCase();
     if (msg.contains('invalid login credentials')) {
@@ -17,6 +22,48 @@ String friendlyError(Object error) {
       return 'Please confirm your email, then try again.';
     }
     return error.message;
+  }
+
+  if (error is PostgrestException) {
+    final msg = error.message.toLowerCase();
+    final details = (error.details?.toString() ?? '').toLowerCase();
+    final hint = (error.hint?.toString() ?? '').toLowerCase();
+    final combined = '$msg $details $hint';
+
+    // Common schema mismatch when the repo code is newer than the Supabase DB.
+    bool looksLikeMissingColumn(String column) {
+      final c = column.toLowerCase();
+      if (!combined.contains(c)) return false;
+      return combined.contains('does not exist') ||
+          combined.contains('could not find the column') ||
+          (combined.contains('column') && combined.contains('not found'));
+    }
+
+    // Common schema mismatch when the repo code is newer than the Supabase DB.
+    if (looksLikeMissingColumn('in_progress')) {
+      return 'Your Supabase schema is missing `tasks.in_progress`. Apply the migration in `supabase/migrations/20260112000000_add_tasks_in_progress.sql`, then restart the app.';
+    }
+
+    if (looksLikeMissingColumn('notes') ||
+        looksLikeMissingColumn('next_step') ||
+        looksLikeMissingColumn('estimate_minutes') ||
+        looksLikeMissingColumn('actual_minutes')) {
+      return 'Your Supabase schema is missing Task Details columns on `tasks`. Run `docs/SUPABASE_TASK_DETAILS_SCHEMA.sql` in the Supabase SQL editor, then restart the app.';
+    }
+
+    if (combined.contains('task_subtasks') &&
+        (combined.contains('does not exist') ||
+            combined.contains('could not find the table') ||
+            (combined.contains('relation') && combined.contains('does not exist')))) {
+      return 'Your Supabase schema is missing the `task_subtasks` table. Run `docs/SUPABASE_TASK_DETAILS_SCHEMA.sql` in the Supabase SQL editor, then restart the app.';
+    }
+
+    if (combined.contains('permission denied') || combined.contains('rls')) {
+      return 'Permission denied by the database (RLS). Check your Supabase policies, then try again.';
+    }
+
+    // Keep it concise; raw details can be shown via `showErrorDialog` when needed.
+    return 'Could not save changes. Please try again.';
   }
 
   return 'Something went wrong. Please try again.';

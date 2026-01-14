@@ -50,3 +50,6 @@ assets/env
 
 # Temporary assets
 /assets/icons_tmp/
+
+# Local generated artifacts (do not commit)
+.tmp/

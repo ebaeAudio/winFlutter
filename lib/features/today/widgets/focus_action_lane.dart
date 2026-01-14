@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../data/tasks/task_details_providers.dart';
+import '../../../data/linear/linear_issue_repository.dart';
+import '../../../data/linear/linear_models.dart';
 import '../../focus/focus_ticker_provider.dart';
 import '../../../ui/spacing.dart';
+import '../../../ui/components/linear_issue_card.dart';
 import '../today_controller.dart';
 import '../today_models.dart';
 import '../today_timebox_controller.dart';
@@ -68,14 +72,22 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
     final isFocusTimer = timer?.kind == TodayTimerKind.focus;
 
     String? nextStep;
+    String? notesText;
+    LinearIssueRef? linearRef;
     if (focusTask != null) {
       final detailsRepo = ref.watch(taskDetailsRepositoryProvider);
       if (detailsRepo == null) {
         nextStep = focusTask.nextStep;
+        notesText = (focusTask.notes ?? focusTask.details ?? '').trim();
       } else {
         final detailsAsync = ref.watch(taskDetailsProvider(focusTask.id));
-        nextStep = detailsAsync.valueOrNull?.nextStep;
+        final details = detailsAsync.valueOrNull;
+        nextStep = details?.nextStep;
+        notesText = (details?.notes ?? '').trim();
       }
+    }
+    if (notesText != null && notesText.isNotEmpty) {
+      linearRef = LinearIssueRef.tryParseFromText(notesText);
     }
 
     return Card(
@@ -134,11 +146,99 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
               else ...[
                 _FocusTaskHeader(title: focusTask.title),
                 Gap.h12,
+                if (linearRef != null) ...[
+                  Builder(
+                    builder: (context) {
+                      final repo = ref.watch(linearIssueRepositoryProvider);
+                      if (repo == null) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(AppSpace.s12),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            color: theme.colorScheme.surfaceContainerHighest
+                                .withOpacity(0.20),
+                            border: Border.all(
+                                color: theme.dividerColor.withOpacity(0.4)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Linear link detected',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Gap.h8,
+                              OutlinedButton.icon(
+                                onPressed: () => context.go('/settings'),
+                                icon: const Icon(Icons.settings),
+                                label: const Text('Set up Linear'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      final issueAsync = ref.watch(
+                        linearIssueByIdentifierProvider(linearRef!.identifier),
+                      );
+                      return issueAsync.when(
+                        loading: () => const Padding(
+                          padding: EdgeInsets.symmetric(vertical: AppSpace.s8),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              Gap.w12,
+                              Text('Loading Linear…'),
+                            ],
+                          ),
+                        ),
+                        error: (_, __) => Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(AppSpace.s12),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            color: theme.colorScheme.errorContainer
+                                .withOpacity(0.20),
+                            border: Border.all(
+                                color: theme.dividerColor.withOpacity(0.4)),
+                          ),
+                          child: Text(
+                            'Could not load Linear issue.',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: theme.colorScheme.error,
+                            ),
+                          ),
+                        ),
+                        data: (issue) {
+                          if (issue == null) return const SizedBox.shrink();
+                          return LinearIssueCard(
+                            issue: issue,
+                            compact: true,
+                            onRefresh: () => ref.invalidate(
+                              linearIssueByIdentifierProvider(
+                                  linearRef!.identifier),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  Gap.h12,
+                ],
                 _StarterStepBlock(
                   taskId: focusTask.id,
                   nextStep: nextStep,
-                  onAddStarterStep: () =>
-                      _openStarterStep(context, ymd: widget.ymd, task: focusTask),
+                  onAddStarterStep: () => _openStarterStep(context,
+                      ymd: widget.ymd, task: focusTask),
                 ),
                 Gap.h12,
                 if (isBreak)
@@ -153,10 +253,12 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                       isTimerRunning: isRunning,
                     ),
                     onEndEarly: () => ref
-                        .read(todayTimeboxControllerProvider(widget.ymd).notifier)
+                        .read(
+                            todayTimeboxControllerProvider(widget.ymd).notifier)
                         .endEarly(),
                     onAddFive: () => ref
-                        .read(todayTimeboxControllerProvider(widget.ymd).notifier)
+                        .read(
+                            todayTimeboxControllerProvider(widget.ymd).notifier)
                         .addMinutes(5),
                     didScheduleExpiredReconcile: _didScheduleExpiredReconcile,
                     didScheduleExpiredReconcileForStartedAtMs:
@@ -164,7 +266,8 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                     onMarkExpiredReconcileScheduled: (startedAtMs) {
                       setState(() {
                         _didScheduleExpiredReconcile = true;
-                        _didScheduleExpiredReconcileForStartedAtMs = startedAtMs;
+                        _didScheduleExpiredReconcileForStartedAtMs =
+                            startedAtMs;
                       });
                     },
                   )
@@ -180,10 +283,12 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                       isTimerRunning: isRunning,
                     ),
                     onEndEarly: () => ref
-                        .read(todayTimeboxControllerProvider(widget.ymd).notifier)
+                        .read(
+                            todayTimeboxControllerProvider(widget.ymd).notifier)
                         .endEarly(),
                     onAddFive: () => ref
-                        .read(todayTimeboxControllerProvider(widget.ymd).notifier)
+                        .read(
+                            todayTimeboxControllerProvider(widget.ymd).notifier)
                         .addMinutes(5),
                     didScheduleExpiredReconcile: _didScheduleExpiredReconcile,
                     didScheduleExpiredReconcileForStartedAtMs:
@@ -191,7 +296,8 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                     onMarkExpiredReconcileScheduled: (startedAtMs) {
                       setState(() {
                         _didScheduleExpiredReconcile = true;
-                        _didScheduleExpiredReconcileForStartedAtMs = startedAtMs;
+                        _didScheduleExpiredReconcileForStartedAtMs =
+                            startedAtMs;
                       });
                     },
                   )
@@ -245,7 +351,8 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                       onPressed: () async {
                         if (isRunning) {
                           await ref
-                              .read(todayTimeboxControllerProvider(widget.ymd).notifier)
+                              .read(todayTimeboxControllerProvider(widget.ymd)
+                                  .notifier)
                               .endEarly();
                         }
                         await controller.setFocusTaskId(null);
@@ -287,7 +394,8 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
     required List<TodayTask> mustWins,
     required bool isTimerRunning,
   }) async {
-    final incomplete = mustWins.where((t) => !t.completed).toList(growable: false);
+    final incomplete =
+        mustWins.where((t) => !t.completed).toList(growable: false);
     if (incomplete.isEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -351,7 +459,9 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
     );
     if (picked == null) return;
     if (!context.mounted) return;
-    await ref.read(todayControllerProvider(ymd).notifier).setFocusTaskId(picked);
+    await ref
+        .read(todayControllerProvider(ymd).notifier)
+        .setFocusTaskId(picked);
   }
 
   Future<void> _openImStuck(
@@ -388,10 +498,12 @@ class _FocusTaskHeader extends StatelessWidget {
         color: theme.colorScheme.primaryContainer.withOpacity(0.35),
         border: Border.all(color: theme.dividerColor.withOpacity(0.4)),
       ),
-      child: Text(
-        title,
-        style: theme.textTheme.titleLarge
-            ?.copyWith(fontWeight: FontWeight.w900),
+      child: SelectionArea(
+        child: Text(
+          title,
+          style:
+              theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+        ),
       ),
     );
   }
@@ -676,4 +788,3 @@ Future<bool> _openStarterStep(
     builder: (context) => StarterStepSheet(ymd: ymd, task: task),
   ).then((v) => v == true);
 }
-

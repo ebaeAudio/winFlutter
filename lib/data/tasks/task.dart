@@ -23,11 +23,13 @@ class Task {
     required this.userId,
     required this.title,
     required this.details,
+    required this.goalDate,
     required this.starterStep,
     required this.estimatedMinutes,
     required this.type,
     required this.date,
     required this.completed,
+    required this.inProgress,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -41,6 +43,11 @@ class Task {
   final String title;
   final String? details;
 
+  /// Optional goal/deadline date (YYYY-MM-DD).
+  ///
+  /// Stored separately from [date] (the scheduled day).
+  final String? goalDate;
+
   /// Optional micro-step scaffolding (Focus v2).
   final String? starterStep;
 
@@ -52,6 +59,7 @@ class Task {
   final String date;
 
   final bool completed;
+  final bool inProgress;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -63,11 +71,13 @@ class Task {
       userId: (json['user_id'] as String?) ?? '',
       title: (json['title'] as String?) ?? '',
       details: (json['details'] as String?),
+      goalDate: (json['goal_date'] as String?),
       starterStep: (json['starter_step'] as String?),
       estimatedMinutes: (json['estimated_minutes'] as num?)?.toInt(),
       type: TaskType.fromDb((json['type'] as String?) ?? ''),
       date: (json['date'] as String?) ?? '',
       completed: (json['completed'] as bool?) ?? false,
+      inProgress: (json['in_progress'] as bool?) ?? false,
       createdAt: DateTime.tryParse(createdAtRaw) ??
           DateTime.fromMillisecondsSinceEpoch(0),
       updatedAt: DateTime.tryParse(updatedAtRaw) ??

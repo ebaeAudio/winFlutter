@@ -35,7 +35,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    Future<void> _pumpSettings(WidgetTester tester, SharedPreferences prefs) async {
+    Future<void> pumpSettings(WidgetTester tester, SharedPreferences prefs) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -53,38 +53,50 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('pairing a card saves hash and enables card-required by default',
+    testWidgets(
+        'pairing a card saves hash; “Require NFC card to end early” stays OFF by default',
         (tester) async {
       final prefs = await SharedPreferences.getInstance();
       nfcScan.enqueue(NfcScanPurpose.pair, 'hash1');
 
-      await _pumpSettings(tester, prefs);
+      await pumpSettings(tester, prefs);
 
-      expect(find.widgetWithText(ListTile, 'Pair NFC card'), findsOneWidget);
+      final pairTile = find.widgetWithText(ListTile, 'Pair NFC card');
+      expect(pairTile, findsOneWidget);
 
-      await tester.tap(find.widgetWithText(ListTile, 'Pair NFC card'));
+      final scrollable = find.byType(Scrollable).first;
+      await tester.dragUntilVisible(pairTile, scrollable, const Offset(0, -300));
+      await tester.tap(pairTile);
       await tester.pumpAndSettle();
 
       expect(find.text('Card paired.'), findsOneWidget);
       expect(find.widgetWithText(ListTile, 'NFC card paired'), findsOneWidget);
 
-      final cardRequired = prefs.getBool('settings_dumb_phone_card_required_v1');
-      expect(cardRequired, true);
+      final requireEndEarly =
+          prefs.getBool('settings_dumb_phone_require_card_to_end_early_v1');
+      expect(requireEndEarly, false);
       expect(secureStore['dumb_phone_paired_card_key_hash_v1'], 'hash1');
     });
 
-    testWidgets('unpair when cardRequired=ON requires scanning the current card',
+    testWidgets(
+        'unpair when “Require NFC card to end early”=ON requires scanning the current card',
         (tester) async {
       secureStore['dumb_phone_paired_card_key_hash_v1'] = 'hash1';
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('settings_dumb_phone_card_required_v1', true);
+      await prefs.setBool(
+        'settings_dumb_phone_require_card_to_end_early_v1',
+        true,
+      );
 
       // Wrong card.
       nfcScan.enqueue(NfcScanPurpose.validateUnpair, 'wrong');
 
-      await _pumpSettings(tester, prefs);
+      await pumpSettings(tester, prefs);
 
-      await tester.tap(find.widgetWithText(ListTile, 'NFC card paired'));
+      final pairedTile = find.widgetWithText(ListTile, 'NFC card paired');
+      final scrollable = find.byType(Scrollable).first;
+      await tester.dragUntilVisible(pairedTile, scrollable, const Offset(0, -300));
+      await tester.tap(pairedTile);
       await tester.pumpAndSettle();
 
       // Action sheet/dialog.
@@ -96,15 +108,22 @@ void main() {
       expect(secureStore['dumb_phone_paired_card_key_hash_v1'], 'hash1');
     });
 
-    testWidgets('unpair when cardRequired=OFF uses confirmation dialog (no scan)',
+    testWidgets(
+        'unpair when “Require NFC card to end early”=OFF uses confirmation dialog (no scan)',
         (tester) async {
       secureStore['dumb_phone_paired_card_key_hash_v1'] = 'hash1';
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('settings_dumb_phone_card_required_v1', false);
+      await prefs.setBool(
+        'settings_dumb_phone_require_card_to_end_early_v1',
+        false,
+      );
 
-      await _pumpSettings(tester, prefs);
+      await pumpSettings(tester, prefs);
 
-      await tester.tap(find.widgetWithText(ListTile, 'NFC card paired'));
+      final pairedTile = find.widgetWithText(ListTile, 'NFC card paired');
+      final scrollable = find.byType(Scrollable).first;
+      await tester.dragUntilVisible(pairedTile, scrollable, const Offset(0, -300));
+      await tester.tap(pairedTile);
       await tester.pumpAndSettle();
 
       await tester.tap(find.widgetWithText(OutlinedButton, 'Unpair'));
@@ -119,19 +138,25 @@ void main() {
       expect(secureStore.containsKey('dumb_phone_paired_card_key_hash_v1'), false);
     });
 
-    testWidgets('replace card when cardRequired=ON validates current card first',
+    testWidgets(
+        'replace card when “Require NFC card to end early”=ON validates current card first',
         (tester) async {
       secureStore['dumb_phone_paired_card_key_hash_v1'] = 'hash1';
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('settings_dumb_phone_card_required_v1', true);
+      await prefs.setBool(
+        'settings_dumb_phone_require_card_to_end_early_v1',
+        true,
+      );
 
       nfcScan
         ..enqueue(NfcScanPurpose.validateUnpair, 'hash1')
         ..enqueue(NfcScanPurpose.pair, 'hash2');
 
-      await _pumpSettings(tester, prefs);
+      await pumpSettings(tester, prefs);
 
-      await tester.tap(find.widgetWithText(ListTile, 'NFC card paired'));
+      final pairedTile = find.widgetWithText(ListTile, 'NFC card paired');
+      await tester.scrollUntilVisible(pairedTile, 200);
+      await tester.tap(pairedTile);
       await tester.pumpAndSettle();
 
       await tester.tap(find.widgetWithText(FilledButton, 'Replace'));
@@ -139,7 +164,10 @@ void main() {
 
       expect(find.text('Card replaced.'), findsOneWidget);
       expect(secureStore['dumb_phone_paired_card_key_hash_v1'], 'hash2');
-      expect(prefs.getBool('settings_dumb_phone_card_required_v1'), true);
+      expect(
+        prefs.getBool('settings_dumb_phone_require_card_to_end_early_v1'),
+        true,
+      );
     });
   });
 }

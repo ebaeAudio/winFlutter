@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../../app/env.dart';
+import '../../app/errors.dart';
 import '../../app/supabase.dart';
 import '../../assistant/assistant_client.dart';
 import '../../assistant/assistant_executor.dart';
@@ -17,6 +18,7 @@ import '../../ui/components/empty_state_card.dart';
 import '../../ui/components/section_header.dart';
 import '../../ui/components/task_details_sheet.dart';
 import '../../ui/spacing.dart';
+import '../tasks/task_details_screen.dart';
 import 'dashboard/dashboard_layout_controller.dart';
 import 'dashboard/dashboard_section_id.dart';
 import 'today_controller.dart';
@@ -353,14 +355,14 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           runSpacing: AppSpace.s8,
                           children: [
                             OutlinedButton.icon(
-                              onPressed: () => setState(() => _date = _date
-                                  .subtract(const Duration(days: 1))),
+                              onPressed: () => setState(() => _date =
+                                  _date.subtract(const Duration(days: 1))),
                               icon: const Icon(Icons.chevron_left),
                               label: const Text('Prev'),
                             ),
                             OutlinedButton.icon(
-                              onPressed: () => setState(() => _date =
-                                  _date.add(const Duration(days: 1))),
+                              onPressed: () => setState(() =>
+                                  _date = _date.add(const Duration(days: 1))),
                               icon: const Icon(Icons.chevron_right),
                               label: const Text('Next'),
                             ),
@@ -475,18 +477,18 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                             strokeWidth: 2),
                                       )
                                     : const Icon(Icons.send),
-                                label:
-                                    Text(_assistantLoading ? 'Working…' : 'Run'),
+                                label: Text(
+                                    _assistantLoading ? 'Working…' : 'Run'),
                               ),
                               if ((_assistantSay ?? '').trim().isNotEmpty) ...[
                                 Gap.h12,
                                 Text(
                                   _assistantSay!,
-                                  style:
-                                      Theme.of(context).textTheme.bodyMedium,
+                                  style: Theme.of(context).textTheme.bodyMedium,
                                 ),
                               ],
-                              if ((_assistantSpeechError ?? '').trim()
+                              if ((_assistantSpeechError ?? '')
+                                  .trim()
                                   .isNotEmpty) ...[
                                 Gap.h8,
                                 Text(
@@ -685,8 +687,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                             taskTitle: ft.title,
                                           ),
                                         );
-                                        if (saved == true &&
-                                            context.mounted) return;
+                                        if (saved == true && context.mounted)
+                                          return;
                                       },
                                       onSwitchTask: mustWins.isEmpty
                                           ? null
@@ -856,7 +858,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                       if (!ok) return;
                                       _habitAddController.clear();
                                       if (!context.mounted) return;
-                                      ScaffoldMessenger.of(context).showSnackBar(
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
                                         const SnackBar(
                                             content: Text('Habit added')),
                                       );
@@ -971,12 +974,14 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                                     ? '${it.progressCount}/${it.item.targetValue}'
                                                     : null,
                                                 onIncrement: () =>
-                                                    trackersController.increment(
+                                                    trackersController
+                                                        .increment(
                                                   trackerId: t.tracker.id,
                                                   itemKey: it.item.key,
                                                 ),
                                                 onDecrement: () =>
-                                                    trackersController.decrement(
+                                                    trackersController
+                                                        .decrement(
                                                   trackerId: t.tracker.id,
                                                   itemKey: it.item.key,
                                                 ),
@@ -1026,7 +1031,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 else
                   _TasksCard(
                     tasks: mustWins,
+                    ymd: ymd,
                     onToggle: controller.toggleTaskCompleted,
+                    onSetInProgress: controller.setTaskInProgress,
                     onEdit: (id, current) => _editTask(
                       context,
                       id: id,
@@ -1088,7 +1095,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 else
                   _TasksCard(
                     tasks: niceTodos,
+                    ymd: ymd,
                     onToggle: controller.toggleTaskCompleted,
+                    onSetInProgress: controller.setTaskInProgress,
                     onEdit: (id, current) => _editTask(
                       context,
                       id: id,
@@ -1146,6 +1155,14 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           ),
                         ),
                         Gap.h8,
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () =>
+                                FocusManager.instance.primaryFocus?.unfocus(),
+                            child: const Text('Done'),
+                          ),
+                        ),
                         Text(
                           'Auto-saves when you leave the field.',
                           style: Theme.of(context).textTheme.bodySmall,
@@ -1484,7 +1501,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 class _TasksCard extends StatelessWidget {
   const _TasksCard({
     required this.tasks,
+    required this.ymd,
     required this.onToggle,
+    required this.onSetInProgress,
     required this.onEdit,
     required this.onDelete,
     required this.onMove,
@@ -1495,7 +1514,9 @@ class _TasksCard extends StatelessWidget {
   });
 
   final List<TodayTask> tasks;
+  final String ymd;
   final Future<void> Function(String taskId) onToggle;
+  final Future<void> Function(String taskId, bool inProgress) onSetInProgress;
   final Future<void> Function(String taskId, String currentTitle) onEdit;
   final Future<void> Function(String taskId) onDelete;
   final Future<void> Function(String taskId) onMove;
@@ -1514,8 +1535,10 @@ class _TasksCard extends StatelessWidget {
             for (final t in tasks)
               _TaskRow(
                 task: t,
+                ymd: ymd,
                 expanded: expandedTaskIds.contains(t.id),
                 onToggle: onToggle,
+                onSetInProgress: onSetInProgress,
                 onEdit: onEdit,
                 onDelete: onDelete,
                 onMove: onMove,
@@ -1565,8 +1588,10 @@ class _DashboardDragHandle extends StatelessWidget {
 class _TaskRow extends StatelessWidget {
   const _TaskRow({
     required this.task,
+    required this.ymd,
     required this.expanded,
     required this.onToggle,
+    required this.onSetInProgress,
     required this.onEdit,
     required this.onDelete,
     required this.onMove,
@@ -1576,8 +1601,10 @@ class _TaskRow extends StatelessWidget {
   });
 
   final TodayTask task;
+  final String ymd;
   final bool expanded;
   final Future<void> Function(String taskId) onToggle;
+  final Future<void> Function(String taskId, bool inProgress) onSetInProgress;
   final Future<void> Function(String taskId, String currentTitle) onEdit;
   final Future<void> Function(String taskId) onDelete;
   final Future<void> Function(String taskId) onMove;
@@ -1593,18 +1620,45 @@ class _TaskRow extends StatelessWidget {
     final noteColor = _hasDetails
         ? theme.colorScheme.primary
         : theme.colorScheme.onSurfaceVariant;
+    final showInProgress = task.inProgress && !task.completed;
+    final goalYmd = (task.goalYmd ?? '').trim();
+    final hasGoal = goalYmd.isNotEmpty;
+
+    String goalLabel() {
+      try {
+        final dt = DateTime.parse(goalYmd);
+        return DateFormat('MMM d').format(dt);
+      } catch (_) {
+        return goalYmd;
+      }
+    }
+
+    bool isOverdue() {
+      if (!hasGoal || task.completed) return false;
+      try {
+        final goal = DateTime.parse(goalYmd);
+        final day = DateTime.parse(ymd);
+        final goalDate = DateTime(goal.year, goal.month, goal.day);
+        final dayDate = DateTime(day.year, day.month, day.day);
+        return goalDate.isBefore(dayDate);
+      } catch (_) {
+        return false;
+      }
+    }
+
+    final overdue = isOverdue();
+    final dueColor =
+        overdue ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant;
 
     return Column(
       children: [
-        GestureDetector(
-          onDoubleTap: () => onEditDetails(task),
-          behavior: HitTestBehavior.opaque,
-          child: ListTile(
-            leading: Checkbox(
-              value: task.completed,
-              onChanged: (_) => onToggle(task.id),
-            ),
-            title: Text(
+        ListTile(
+          leading: Checkbox(
+            value: task.completed,
+            onChanged: (_) => onToggle(task.id),
+          ),
+          title: SelectionArea(
+            child: Text(
               task.title,
               style: task.completed
                   ? theme.textTheme.bodyLarge?.copyWith(
@@ -1613,64 +1667,148 @@ class _TaskRow extends StatelessWidget {
                     )
                   : theme.textTheme.bodyLarge,
             ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                GestureDetector(
-                  onLongPress: () => onEditDetails(task),
-                  child: IconButton(
-                    tooltip: _hasDetails ? 'Show note' : 'Add note',
-                    icon: Icon(
-                      _hasDetails
-                          ? Icons.sticky_note_2
-                          : Icons.sticky_note_2_outlined,
-                      color: noteColor,
-                    ),
-                    onPressed: _hasDetails
-                        ? () => onToggleExpanded(task.id)
-                        : () => onEditDetails(task),
+          ),
+          subtitle: (showInProgress || hasGoal)
+              ? Wrap(
+                  spacing: AppSpace.s12,
+                  runSpacing: AppSpace.s4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (showInProgress)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.timelapse,
+                            size: 16,
+                            color: theme.colorScheme.primary,
+                          ),
+                          Gap.w8,
+                          Text(
+                            'In progress',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (hasGoal)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.event, size: 16, color: dueColor),
+                          Gap.w8,
+                          Text(
+                            'Due ${goalLabel()}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: dueColor,
+                              fontWeight:
+                                  overdue ? FontWeight.w700 : FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                )
+              : null,
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (context) => TaskDetailsScreen(
+                taskId: task.id,
+                ymd: ymd,
+              ),
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              GestureDetector(
+                onLongPress: () => onEditDetails(task),
+                child: IconButton(
+                  tooltip: _hasDetails ? 'Show note' : 'Add note',
+                  icon: Icon(
+                    _hasDetails
+                        ? Icons.sticky_note_2
+                        : Icons.sticky_note_2_outlined,
+                    color: noteColor,
                   ),
+                  onPressed: _hasDetails
+                      ? () => onToggleExpanded(task.id)
+                      : () => onEditDetails(task),
                 ),
-                PopupMenuButton<String>(
-                  onSelected: (value) async {
-                    switch (value) {
-                      case 'starterStep':
-                        onEditStarterStep(task);
-                        break;
-                      case 'details':
-                        onEditDetails(task);
-                        break;
-                      case 'edit':
-                        await onEdit(task.id, task.title);
-                        break;
-                      case 'move':
-                        await onMove(task.id);
-                        break;
-                      case 'delete':
-                        await onDelete(task.id);
+              ),
+              PopupMenuButton<String>(
+                onSelected: (value) async {
+                  switch (value) {
+                    case 'progress':
+                      final next = !task.inProgress;
+                      try {
+                        await onSetInProgress(task.id, next);
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Deleted')),
+                            SnackBar(
+                              content: Text(
+                                next
+                                    ? 'Marked in progress'
+                                    : 'Cleared in progress',
+                              ),
+                            ),
                           );
                         }
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(
-                        value: 'starterStep', child: Text('Starter step')),
-                    PopupMenuDivider(),
-                    PopupMenuItem(value: 'details', child: Text('Details')),
-                    PopupMenuDivider(),
-                    PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    PopupMenuItem(
-                        value: 'move', child: Text('Move to other list')),
-                    PopupMenuDivider(),
-                    PopupMenuItem(value: 'delete', child: Text('Delete')),
-                  ],
-                ),
-              ],
-            ),
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(friendlyError(e))),
+                          );
+                        }
+                      }
+                      break;
+                    case 'starterStep':
+                      onEditStarterStep(task);
+                      break;
+                    case 'details':
+                      onEditDetails(task);
+                      break;
+                    case 'edit':
+                      await onEdit(task.id, task.title);
+                      break;
+                    case 'move':
+                      await onMove(task.id);
+                      break;
+                    case 'delete':
+                      await onDelete(task.id);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Deleted')),
+                        );
+                      }
+                      break;
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'progress',
+                    child: Text(
+                      task.inProgress
+                          ? 'Clear in progress'
+                          : 'Mark in progress',
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                      value: 'starterStep', child: Text('Starter step')),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(value: 'details', child: Text('Details')),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                  const PopupMenuItem(
+                      value: 'move', child: Text('Move to other list')),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                ],
+              ),
+            ],
           ),
         ),
         if (expanded && _hasDetails)
@@ -1730,7 +1868,8 @@ class _FocusActionLane extends ConsumerWidget {
 
   final VoidCallback? onSwitchTask;
   final Future<void> Function() onExitFocus;
-  final Future<void> Function(String taskId, String taskTitle) onEditStarterStep;
+  final Future<void> Function(String taskId, String taskTitle)
+      onEditStarterStep;
   final void Function(int minutes) onStartTimeboxMinutes;
   final VoidCallback? onImStuck;
 
@@ -1789,10 +1928,12 @@ class _FocusActionLane extends ConsumerWidget {
             color: theme.colorScheme.primaryContainer.withOpacity(0.35),
             border: Border.all(color: theme.dividerColor.withOpacity(0.4)),
           ),
-          child: Text(
-            task.title,
-            style:
-                theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+          child: SelectionArea(
+            child: Text(
+              task.title,
+              style: theme.textTheme.titleLarge
+                  ?.copyWith(fontWeight: FontWeight.w900),
+            ),
           ),
         ),
         Gap.h12,
@@ -1809,8 +1950,8 @@ class _FocusActionLane extends ConsumerWidget {
             children: [
               Text(
                 'Starter step (next 2 minutes)',
-                style:
-                    theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w800),
               ),
               Gap.h8,
               if (hasStarterStep)
@@ -1830,7 +1971,9 @@ class _FocusActionLane extends ConsumerWidget {
                 child: OutlinedButton.icon(
                   onPressed: () => onEditStarterStep(task.id, task.title),
                   icon: Icon(hasStarterStep ? Icons.edit : Icons.add),
-                  label: Text(hasStarterStep ? 'Edit starter step' : 'Add starter step'),
+                  label: Text(hasStarterStep
+                      ? 'Edit starter step'
+                      : 'Add starter step'),
                 ),
               ),
             ],

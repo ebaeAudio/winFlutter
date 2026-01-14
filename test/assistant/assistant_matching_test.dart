@@ -12,6 +12,7 @@ void main() {
           title: 'Call Mom',
           type: TodayTaskType.mustWin,
           completed: false,
+          inProgress: false,
           createdAtMs: 0,
         ),
         const TodayTask(
@@ -19,6 +20,7 @@ void main() {
           title: 'Call Mom ASAP',
           type: TodayTaskType.mustWin,
           completed: false,
+          inProgress: false,
           createdAtMs: 0,
         ),
       ];
@@ -32,6 +34,7 @@ void main() {
           title: 'Email Bob about budget',
           type: TodayTaskType.mustWin,
           completed: false,
+          inProgress: false,
           createdAtMs: 0,
         ),
         const TodayTask(
@@ -39,6 +42,7 @@ void main() {
           title: 'Email Bob',
           type: TodayTaskType.mustWin,
           completed: false,
+          inProgress: false,
           createdAtMs: 0,
         ),
       ];

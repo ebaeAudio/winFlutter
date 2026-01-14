@@ -62,6 +62,13 @@ Optional (demo mode):
 flutter run --dart-define=DEMO_MODE=true
 ```
 
+### Run on macOS from Cursor (Run/Debug button)
+
+This repo includes Cursor/VS Code launch configs in `.vscode/launch.json`.
+
+- In Cursor, open the **Run** panel and choose **Flutter: macOS**, then click **Run**.
+- If you need a non-debug run: open the Command Palette → **Tasks: Run Task** → **Flutter: run macOS (no debug)**.
+
 ---
 
 ## What’s implemented today

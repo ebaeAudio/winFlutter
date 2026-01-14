@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
+import '../../app/errors.dart';
 import '../../data/tasks/task_details_models.dart';
 import '../../data/tasks/task_details_providers.dart';
+import '../../data/linear/linear_issue_repository.dart';
+import '../../data/linear/linear_models.dart';
 import '../today/today_controller.dart';
 import '../today/today_models.dart';
 import '../../ui/app_scaffold.dart';
 import '../../ui/components/reachability_fab_cluster.dart';
+import '../../ui/components/linear_issue_card.dart';
 import '../../ui/nav_shell.dart';
 import '../../ui/spacing.dart';
 
@@ -67,9 +72,64 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
     );
   }
 
+  static DateTime? _parseYmd(String ymd) {
+    try {
+      return DateTime.parse(ymd);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String _formatYmd(DateTime dt) => DateFormat('yyyy-MM-dd').format(dt);
+
+  static String _friendlyDate(String ymd) {
+    final dt = _parseYmd(ymd);
+    if (dt == null) return ymd;
+    return DateFormat('EEE, MMM d').format(dt);
+  }
+
+  Future<void> _pickGoalDate({
+    required String ymd,
+    required String taskId,
+    required String? currentGoalYmd,
+  }) async {
+    final initial =
+        _parseYmd(currentGoalYmd ?? '') ?? _parseYmd(ymd) ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked == null) return;
+    final nextYmd = _formatYmd(picked);
+    await ref
+        .read(todayControllerProvider(ymd).notifier)
+        .setTaskGoalDate(taskId, nextYmd);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Goal date set to ${_friendlyDate(nextYmd)}')),
+    );
+  }
+
+  Future<void> _clearGoalDate(
+      {required String ymd, required String taskId}) async {
+    await ref
+        .read(todayControllerProvider(ymd).notifier)
+        .setTaskGoalDate(taskId, null);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Goal date cleared')),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
+    _notesController.addListener(() {
+      // Update Linear embed visibility as the user edits notes.
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -225,12 +285,15 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Saved')),
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _saveError = 'Could not save changes.';
+        _saveError = friendlyError(e);
       });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyError(e))),
+      );
     }
   }
 
@@ -268,9 +331,12 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
           _subtaskAddController.clear();
         });
       }
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
-      setState(() => _saveError = 'Could not add subtask.');
+      setState(() => _saveError = friendlyError(e));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyError(e))),
+      );
     }
   }
 
@@ -353,6 +419,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
         today?.tasks.where((t) => t.id == widget.taskId).toList().firstOrNull;
 
     final title = task?.title ?? _titleController.text;
+    final linearRef = LinearIssueRef.tryParseFromText(_notesController.text);
 
     return AppScaffold(
       title: 'Task Details',
@@ -393,8 +460,9 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                   : () => ref
                       .read(todayControllerProvider(ymd).notifier)
                       .setTaskCompleted(widget.taskId, !task.completed),
-              semanticLabel:
-                  task.completed ? 'Mark task not completed' : 'Mark task completed',
+              semanticLabel: task.completed
+                  ? 'Mark task not completed'
+                  : 'Mark task completed',
             ),
           ReachabilityFabAction(
             icon: Icons.save,
@@ -439,12 +507,14 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title.isEmpty ? '—' : title,
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w900),
+                  SelectionArea(
+                    child: Text(
+                      title.isEmpty ? '—' : title,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w900),
+                    ),
                   ),
                   Gap.h8,
                   Wrap(
@@ -456,9 +526,43 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                         selected: task?.completed == true,
                         onSelected: task == null
                             ? null
-                            : (v) => ref
-                                .read(todayControllerProvider(ymd).notifier)
-                                .setTaskCompleted(widget.taskId, v),
+                            : (v) async {
+                                setState(() => _saveError = null);
+                                try {
+                                  await ref
+                                      .read(
+                                          todayControllerProvider(ymd).notifier)
+                                      .setTaskCompleted(widget.taskId, v);
+                                } catch (e) {
+                                  if (!mounted) return;
+                                  setState(() => _saveError = friendlyError(e));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(friendlyError(e))),
+                                  );
+                                }
+                              },
+                      ),
+                      FilterChip(
+                        label: const Text('In progress'),
+                        selected:
+                            task?.inProgress == true && task?.completed != true,
+                        onSelected: task == null
+                            ? null
+                            : (v) async {
+                                setState(() => _saveError = null);
+                                try {
+                                  await ref
+                                      .read(
+                                          todayControllerProvider(ymd).notifier)
+                                      .setTaskInProgress(widget.taskId, v);
+                                } catch (e) {
+                                  if (!mounted) return;
+                                  setState(() => _saveError = friendlyError(e));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(friendlyError(e))),
+                                  );
+                                }
+                              },
                       ),
                       if (task != null)
                         SegmentedButton<TodayTaskType>(
@@ -475,6 +579,39 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                               .read(todayControllerProvider(ymd).notifier)
                               .moveTaskType(widget.taskId, s.first),
                         ),
+                      if (task != null) ...[
+                        if ((task.goalYmd ?? '').trim().isEmpty)
+                          ActionChip(
+                            avatar: const Icon(Icons.event),
+                            label: const Text('Add goal date'),
+                            onPressed: (_loading || _saving || ymd.isEmpty)
+                                ? null
+                                : () => _pickGoalDate(
+                                      ymd: ymd,
+                                      taskId: widget.taskId,
+                                      currentGoalYmd: task.goalYmd,
+                                    ),
+                          )
+                        else
+                          InputChip(
+                            avatar: const Icon(Icons.event),
+                            label: Text('Due ${_friendlyDate(task.goalYmd!)}'),
+                            onPressed: (_loading || _saving || ymd.isEmpty)
+                                ? null
+                                : () => _pickGoalDate(
+                                      ymd: ymd,
+                                      taskId: widget.taskId,
+                                      currentGoalYmd: task.goalYmd,
+                                    ),
+                            onDeleted: (_loading || _saving || ymd.isEmpty)
+                                ? null
+                                : () => _clearGoalDate(
+                                      ymd: ymd,
+                                      taskId: widget.taskId,
+                                    ),
+                            deleteIcon: const Icon(Icons.close),
+                          ),
+                      ],
                       OutlinedButton.icon(
                         onPressed: () => context.pop(),
                         icon: const Icon(Icons.close),
@@ -495,6 +632,118 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                     ?.copyWith(color: Theme.of(context).colorScheme.error)),
           ],
           Gap.h16,
+          if (linearRef != null) ...[
+            Builder(
+              builder: (context) {
+                final repo = ref.watch(linearIssueRepositoryProvider);
+                if (repo == null) {
+                  return Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpace.s16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Linear link detected',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          Gap.h8,
+                          const Text(
+                            'Add your Linear API key in Settings to show an issue preview and enable sync.',
+                          ),
+                          Gap.h12,
+                          FilledButton.icon(
+                            onPressed: () => context.go('/settings'),
+                            icon: const Icon(Icons.settings),
+                            label: const Text('Open settings'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+
+                final issueAsync = ref.watch(
+                    linearIssueByIdentifierProvider(linearRef.identifier));
+                return issueAsync.when(
+                  loading: () => const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(AppSpace.s16),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          Gap.w12,
+                          Text('Loading Linear issue…'),
+                        ],
+                      ),
+                    ),
+                  ),
+                  error: (e, _) => Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpace.s16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Could not load Linear issue.',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w800),
+                          ),
+                          Gap.h8,
+                          Text(e.toString(),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: Theme.of(context).colorScheme.error,
+                                  )),
+                        ],
+                      ),
+                    ),
+                  ),
+                  data: (issue) {
+                    if (issue == null) {
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpace.s16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Linear issue not found',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w800),
+                              ),
+                              Gap.h8,
+                              Text('Identifier: ${linearRef.identifier}'),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                    return LinearIssueCard(
+                      issue: issue,
+                      onRefresh: () => ref.invalidate(
+                        linearIssueByIdentifierProvider(linearRef.identifier),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+            Gap.h16,
+          ],
           Card(
             key: _notesKey,
             child: Padding(

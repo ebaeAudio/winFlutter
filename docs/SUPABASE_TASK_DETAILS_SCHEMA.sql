@@ -30,7 +30,8 @@ create index if not exists task_subtasks_task_id_idx on public.task_subtasks(tas
 alter table public.task_subtasks enable row level security;
 
 -- Users can read subtasks for their own tasks
-create policy if not exists "task_subtasks_select_own"
+drop policy if exists "task_subtasks_select_own" on public.task_subtasks;
+create policy "task_subtasks_select_own"
 on public.task_subtasks
 for select
 using (
@@ -43,7 +44,8 @@ using (
 );
 
 -- Users can insert subtasks for their own tasks
-create policy if not exists "task_subtasks_insert_own"
+drop policy if exists "task_subtasks_insert_own" on public.task_subtasks;
+create policy "task_subtasks_insert_own"
 on public.task_subtasks
 for insert
 with check (
@@ -56,7 +58,8 @@ with check (
 );
 
 -- Users can update subtasks for their own tasks
-create policy if not exists "task_subtasks_update_own"
+drop policy if exists "task_subtasks_update_own" on public.task_subtasks;
+create policy "task_subtasks_update_own"
 on public.task_subtasks
 for update
 using (
@@ -77,7 +80,8 @@ with check (
 );
 
 -- Users can delete subtasks for their own tasks
-create policy if not exists "task_subtasks_delete_own"
+drop policy if exists "task_subtasks_delete_own" on public.task_subtasks;
+create policy "task_subtasks_delete_own"
 on public.task_subtasks
 for delete
 using (

@@ -35,7 +35,9 @@ class LocalAllTasksRepository implements AllTasksRepository {
                 ? data.TaskType.mustWin
                 : data.TaskType.niceToDo,
             ymd: day.ymd.trim().isEmpty ? ymd : day.ymd,
+            goalYmd: t.goalYmd,
             completed: t.completed,
+            inProgress: t.inProgress,
             createdAtMs: t.createdAtMs,
           ),
         );
@@ -64,7 +66,38 @@ class LocalAllTasksRepository implements AllTasksRepository {
     final day = TodayDayData.fromJsonString(raw, fallbackYmd: ymd);
     final nextTasks = [
       for (final t in day.tasks)
-        if (t.id == taskId) t.copyWith(completed: completed) else t,
+        if (t.id == taskId)
+          t.copyWith(completed: completed, inProgress: completed ? false : null)
+        else
+          t,
+    ];
+    final nextDay = day.copyWith(
+      tasks: nextTasks,
+      focusTaskId: day.focusTaskId == taskId ? null : day.focusTaskId,
+    );
+    await _prefs.setString(key, nextDay.toJsonString());
+  }
+
+  @override
+  Future<void> setInProgress({
+    required String ymd,
+    required String taskId,
+    required bool inProgress,
+  }) async {
+    final key = '$_dayPrefix$ymd';
+    final raw = _prefs.getString(key);
+    if (raw == null || raw.trim().isEmpty) return;
+
+    final day = TodayDayData.fromJsonString(raw, fallbackYmd: ymd);
+    final nextTasks = [
+      for (final t in day.tasks)
+        if (t.id == taskId)
+          t.copyWith(
+            inProgress: inProgress,
+            completed: inProgress ? false : null,
+          )
+        else
+          t,
     ];
     final nextDay = day.copyWith(
       tasks: nextTasks,
@@ -104,7 +137,9 @@ class LocalAllTasksRepository implements AllTasksRepository {
     final nextFromTasks = <TodayTask>[];
     for (final t in fromDay.tasks) {
       if (t.id == taskId) {
-        moving = resetCompleted ? t.copyWith(completed: false) : t;
+        moving = resetCompleted
+            ? t.copyWith(completed: false, inProgress: false)
+            : t;
       } else {
         nextFromTasks.add(t);
       }

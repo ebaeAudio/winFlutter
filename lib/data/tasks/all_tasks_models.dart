@@ -7,7 +7,9 @@ class AllTask {
     required this.title,
     required this.type,
     required this.ymd,
+    required this.goalYmd,
     required this.completed,
+    required this.inProgress,
     required this.createdAtMs,
   });
 
@@ -18,7 +20,11 @@ class AllTask {
   /// YYYY-MM-DD
   final String ymd;
 
+  /// Optional goal/deadline date (YYYY-MM-DD).
+  final String? goalYmd;
+
   final bool completed;
+  final bool inProgress;
 
   /// Best-effort timestamp for stable sorting.
   final int createdAtMs;

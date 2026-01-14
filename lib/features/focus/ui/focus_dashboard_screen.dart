@@ -147,7 +147,7 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
     }
     final friction = policy?.friction ?? FocusFrictionSettings.defaults;
     final gate = ref.watch(dumbPhoneSessionGateControllerProvider).valueOrNull;
-    final cardRequired = gate?.cardRequired == true;
+    final requireCardToEndEarly = gate?.requireCardToEndEarly == true;
 
     // Ensure we auto-complete once the timer elapses.
     // IMPORTANT: Do not modify providers during build; defer to after the frame.
@@ -194,7 +194,7 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
             const SizedBox(height: 12),
             HoldToConfirmButton(
               holdDuration: Duration(seconds: friction.holdToUnlockSeconds),
-              label: cardRequired
+              label: requireCardToEndEarly
                   ? 'Hold, then scan card to end'
                   : 'Hold to end session early',
               icon: Icons.stop_circle,
@@ -219,12 +219,12 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
                 }
 
                 Future<bool> ensureCardValidated(BuildContext ctx) async {
-                  if (!cardRequired) return true;
+                  if (!requireCardToEndEarly) return true;
                   if (pairedHash == null || pairedHash.isEmpty) {
                     if (ctx.mounted) {
                       ScaffoldMessenger.of(ctx).showSnackBar(
                         const SnackBar(
-                          content: Text('Pair a card to enable card-required mode.'),
+                          content: Text('Pair a card to enable this setting.'),
                         ),
                       );
                     }
@@ -254,9 +254,9 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
             ),
             const SizedBox(height: 8),
             Text(
-              cardRequired
-                  ? 'To turn this off early: open Dumb Phone Mode and hold for ${friction.holdToUnlockSeconds}s, wait ${friction.unlockDelaySeconds}s, then scan your card.'
-                  : 'To turn this off early: open Dumb Phone Mode and hold for ${friction.holdToUnlockSeconds}s, then wait ${friction.unlockDelaySeconds}s.',
+              requireCardToEndEarly
+                  ? 'To end early: open Dumb Phone Mode → hold for ${friction.holdToUnlockSeconds}s, wait ${friction.unlockDelaySeconds}s, then scan your paired card.'
+                  : 'To end early: open Dumb Phone Mode → hold for ${friction.holdToUnlockSeconds}s, then wait ${friction.unlockDelaySeconds}s.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -285,11 +285,19 @@ class _StartSessionCard extends ConsumerStatefulWidget {
 class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
   String? _policyId;
   double _minutes = 25;
+  _StartSessionMode _mode = _StartSessionMode.duration;
+  TimeOfDay? _endTime;
 
   @override
   void initState() {
     super.initState();
     _policyId = widget.policies.isEmpty ? null : widget.policies.first.id;
+  }
+
+  DateTime? _endAtForToday({required DateTime now}) {
+    final t = _endTime;
+    if (t == null) return null;
+    return DateTime(now.year, now.month, now.day, t.hour, t.minute);
   }
 
   @override
@@ -298,7 +306,17 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
     final startState = ref.watch(activeFocusSessionProvider);
     final settings = ref.watch(userSettingsControllerProvider);
     final gate = ref.watch(dumbPhoneSessionGateControllerProvider).valueOrNull;
-    final cardRequired = gate?.cardRequired == true;
+    final requireCardToEndEarly = gate?.requireCardToEndEarly == true;
+    final now = DateTime.now();
+    final endAt = _endAtForToday(now: now);
+    final endAtIsValid = endAt != null && endAt.isAfter(now);
+    final endAtDurationMinutes =
+        endAt == null ? null : endAt.difference(now).inMinutes;
+    final missingPolicySelection = policies.isEmpty || _policyId == null;
+    final startDisabled = startState.isLoading ||
+        (!missingPolicySelection &&
+            _mode == _StartSessionMode.endAt &&
+            (!endAtIsValid));
     FocusPolicy? selected;
     if (_policyId != null) {
       for (final p in policies) {
@@ -334,105 +352,148 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                 decoration: const InputDecoration(labelText: 'Policy'),
               ),
             const SizedBox(height: 12),
-            Text('Duration: ${_minutes.toInt()} min'),
-            Slider(
-              value: _minutes,
-              min: 5,
-              max: 180,
-              divisions: 35,
-              label: '${_minutes.toInt()} min',
-              onChanged: (v) => setState(() => _minutes = v),
+            SegmentedButton<_StartSessionMode>(
+              segments: const [
+                ButtonSegment(
+                  value: _StartSessionMode.duration,
+                  label: Text('Duration'),
+                ),
+                ButtonSegment(
+                  value: _StartSessionMode.endAt,
+                  label: Text('End at'),
+                ),
+              ],
+              selected: {_mode},
+              onSelectionChanged: (set) {
+                if (set.isEmpty) return;
+                setState(() => _mode = set.first);
+              },
             ),
             const SizedBox(height: 12),
+            if (_mode == _StartSessionMode.duration) ...[
+              Text('Duration: ${_minutes.toInt()} min'),
+              Slider(
+                value: _minutes,
+                min: 5,
+                max: 180,
+                divisions: 35,
+                label: '${_minutes.toInt()} min',
+                onChanged: (v) => setState(() => _minutes = v),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: startState.isLoading
+                          ? null
+                          : () async {
+                              final picked = await showTimePicker(
+                                context: context,
+                                initialTime: _endTime ??
+                                    TimeOfDay.fromDateTime(
+                                      now.add(const Duration(minutes: 60)),
+                                    ),
+                              );
+                              if (picked == null) return;
+                              if (!mounted) return;
+                              setState(() => _endTime = picked);
+                            },
+                      icon: const Icon(Icons.schedule),
+                      label: Text(
+                        _endTime == null
+                            ? 'Pick end time'
+                            : 'End at ${_endTime!.format(context)}',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (_endTime != null && !endAtIsValid) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'End time must be in the future.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.error,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+              if (_endTime != null && endAtIsValid && endAtDurationMinutes != null)
+                ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Duration: $endAtDurationMinutes min',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+            ],
+            const SizedBox(height: 12),
             FilledButton.icon(
-              onPressed: startState.isLoading
+              onPressed: startDisabled
                   ? null
                   : policies.isEmpty || _policyId == null
-                  ? () => context.go('/focus/policies')
-                  : () async {
+                      ? () => context.go('/focus/policies')
+                      : () async {
+                          final now = DateTime.now();
                       final policy = selected;
                       if (policy == null) return;
 
-                      final ok = await _confirmStart(
-                        context: context,
-                        policy: policy,
-                        duration: Duration(minutes: _minutes.toInt()),
-                      );
-                      if (!ok) return;
-                      if (!context.mounted) return;
+                          final computedEndsAt =
+                              _mode == _StartSessionMode.duration
+                                  ? now.add(Duration(minutes: _minutes.toInt()))
+                                  : _endAtForToday(now: now)!;
+                          final computedDuration =
+                              _mode == _StartSessionMode.duration
+                                  ? Duration(minutes: _minutes.toInt())
+                                  : computedEndsAt.difference(now);
 
-                      final gateController = ref.read(
-                        dumbPhoneSessionGateControllerProvider.notifier,
-                      );
-                      final pairedHash = ref
-                          .read(dumbPhoneSessionGateControllerProvider)
-                          .valueOrNull
-                          ?.pairedCardKeyHash;
-                      final nfc = ref.read(nfcCardServiceProvider);
-
-                      Future<bool> ensureCardValidated(BuildContext ctx) async {
-                        if (!cardRequired) return true;
-                        if (pairedHash == null || pairedHash.isEmpty) {
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Pair a card to enable card-required mode.',
-                                ),
-                              ),
-                            );
-                          }
-                          return false;
-                        }
-
-                      final scan = await ref
-                          .read(nfcScanServiceProvider)
-                          .scanKeyHash(ctx, purpose: NfcScanPurpose.validateStart);
-                      if (scan == null) return false;
-
-                        final ok = nfc.constantTimeEquals(
-                        scan,
-                          pairedHash,
-                        );
-                        if (!ok && ctx.mounted) {
-                          ScaffoldMessenger.of(ctx).showSnackBar(
-                            const SnackBar(
-                              content: Text('That is not the paired card.'),
-                            ),
+                          final ok = await _confirmStart(
+                            context: context,
+                            policy: policy,
+                            endsAt: computedEndsAt,
+                            duration: computedDuration,
+                            requireCardToEndEarly: requireCardToEndEarly,
                           );
-                        }
-                        return ok;
-                      }
+                          if (!ok) return;
+                          if (!context.mounted) return;
 
-                      final started = await gateController.startSession(
-                        context: context,
-                        policyId: policy.id,
-                        duration: Duration(minutes: _minutes.toInt()),
-                        ensureCardValidated: ensureCardValidated,
-                      );
-                      if (!started) return;
+                          final gateController = ref.read(
+                            dumbPhoneSessionGateControllerProvider.notifier,
+                          );
 
-                      if (!context.mounted) return;
-                      final ymd =
-                          DateFormat('yyyy-MM-dd').format(DateTime.now());
-                      await ref
-                          .read(todayControllerProvider(ymd).notifier)
-                          .enableFocusModeAndSelectDefaultTask();
-                      if (settings.dumbPhoneAutoStart25mTimebox) {
-                        await ref
-                            .read(todayTimeboxControllerProvider(ymd).notifier)
-                            .queuePendingAutoStart25m();
-                      }
-                      if (!context.mounted) return;
-                      context.go('/today');
-                    },
+                          final started = await gateController.startSession(
+                            context: context,
+                            policyId: policy.id,
+                            duration: _mode == _StartSessionMode.duration
+                                ? Duration(minutes: _minutes.toInt())
+                                : null,
+                            endsAt: _mode == _StartSessionMode.endAt
+                                ? computedEndsAt
+                                : null,
+                          );
+                          if (!started) return;
+
+                          if (!context.mounted) return;
+                          final ymd =
+                              DateFormat('yyyy-MM-dd').format(DateTime.now());
+                          await ref
+                              .read(todayControllerProvider(ymd).notifier)
+                              .enableFocusModeAndSelectDefaultTask();
+                          if (settings.dumbPhoneAutoStart25mTimebox) {
+                            await ref
+                                .read(todayTimeboxControllerProvider(ymd)
+                                    .notifier)
+                                .queuePendingAutoStart25m();
+                          }
+                          if (!context.mounted) return;
+                          context.go('/today');
+                        },
               icon: const Icon(Icons.play_arrow),
               label: Text(
                 policies.isEmpty
                     ? 'Create a policy'
-                    : cardRequired
-                        ? 'Scan card to start'
-                        : 'Start session',
+                    : 'Start session',
               ),
             ),
           ],
@@ -444,12 +505,13 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
   static Future<bool> _confirmStart({
     required BuildContext context,
     required FocusPolicy policy,
+    required DateTime endsAt,
     required Duration duration,
+    required bool requireCardToEndEarly,
   }) async {
     final isIOS = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
     final isAndroid =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-    final endsAt = DateTime.now().add(duration);
     final friction = policy.friction;
     final allowedCount = policy.allowedApps.length;
 
@@ -469,7 +531,7 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                 children: [
                   Text('Policy: ${policy.name}'),
                   Text(
-                      'Duration: ${duration.inMinutes} min (ends at ${DateFormat.Hm().format(endsAt)})'),
+                      'Ends at: ${DateFormat.Hm().format(endsAt)} (${duration.inMinutes} min)'),
                   const SizedBox(height: 12),
                   Text(
                     'What will happen',
@@ -501,10 +563,16 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                   Text(
                     'To end early: open Dumb Phone Mode → “Hold to end session early” (${friction.holdToUnlockSeconds}s hold, then ${friction.unlockDelaySeconds}s delay).',
                   ),
+                  if (requireCardToEndEarly) ...[
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Because “Require NFC card to end early” is enabled, you’ll also need to scan your paired card.',
+                    ),
+                  ],
                   if (isAndroid) ...[
                     const SizedBox(height: 6),
                     Text(
-                      'Android tip: the blocking screen also has “Hold ${friction.holdToUnlockSeconds}s” to end the session, plus an “Emergency unlock (${friction.emergencyUnlockMinutes} min)” button.',
+                      'Android tip: the blocking screen also has “Hold ${friction.holdToUnlockSeconds}s” to end the session, plus an “Emergency end (${friction.emergencyUnlockMinutes} min)” button.',
                     ),
                   ],
                 ],
@@ -525,4 +593,9 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
         false;
     return ok;
   }
+}
+
+enum _StartSessionMode {
+  duration,
+  endAt,
 }

@@ -81,7 +81,12 @@ class _TaskDetailsSheetState extends State<TaskDetailsSheet> {
                   ?.copyWith(fontWeight: FontWeight.w800),
             ),
             Gap.h8,
-            Text(widget.title, style: Theme.of(context).textTheme.bodyMedium),
+            SelectionArea(
+              child: Text(
+                widget.title,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
             Gap.h12,
             TextField(
               controller: _controller,
@@ -99,7 +104,8 @@ class _TaskDetailsSheetState extends State<TaskDetailsSheet> {
             Row(
               children: [
                 TextButton(
-                  onPressed: _saving ? null : () => Navigator.of(context).pop(false),
+                  onPressed:
+                      _saving ? null : () => Navigator.of(context).pop(false),
                   child: const Text('Cancel'),
                 ),
                 const Spacer(),
@@ -121,4 +127,3 @@ class _TaskDetailsSheetState extends State<TaskDetailsSheet> {
     );
   }
 }
-

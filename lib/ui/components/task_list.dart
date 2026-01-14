@@ -100,11 +100,13 @@ class TaskListRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: titleStyle,
+                      SelectionArea(
+                        child: Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: titleStyle,
+                        ),
                       ),
                       if (metadata != null) ...[
                         Gap.h4,
@@ -132,4 +134,3 @@ class TaskListRow extends StatelessWidget {
     );
   }
 }
-

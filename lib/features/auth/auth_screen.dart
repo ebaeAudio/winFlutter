@@ -38,6 +38,14 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   bool _obscureConfirm = true;
   bool _submitted = false;
 
+  String _passwordResetRedirectTo() {
+    // On web, default routing uses hash URLs unless explicitly configured
+    // otherwise. Use a hash-based redirect so it works on static hosting.
+    if (kIsWeb) return '${Uri.base.origin}/#/auth/recovery';
+    // Mobile deep link scheme (also needs to be added to Supabase Redirect URLs).
+    return 'winflutter://auth-callback';
+  }
+
   @override
   void dispose() {
     _email.dispose();
@@ -125,6 +133,25 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           setState(() => _info = 'Check your email for the magic link.');
           break;
       }
+    });
+  }
+
+  Future<void> _forgotPassword() async {
+    setState(() => _submitted = true);
+    final emailError = _validateEmail(_email.text);
+    if (emailError != null) return;
+
+    final supabase = ref.read(supabaseProvider);
+    final client = supabase.client;
+    if (client == null) return;
+
+    await _run(() async {
+      final email = _email.text.trim();
+      await client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: _passwordResetRedirectTo(),
+      );
+      setState(() => _info = 'Check your email for the reset link.');
     });
   }
 
@@ -275,6 +302,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           ),
         ),
         Gap.h16,
+        if (_mode == _AuthMode.signIn) ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: _busy || client == null ? null : _forgotPassword,
+              child: const Text('Forgot password?'),
+            ),
+          ),
+          Gap.h12,
+        ],
         if (client == null)
           const InfoBanner(
             title: 'Supabase isn’t configured',

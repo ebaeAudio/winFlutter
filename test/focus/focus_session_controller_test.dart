@@ -61,6 +61,49 @@ void main() {
     expect(sessions.history, isNotEmpty);
     expect(engine.ended, true);
   });
+
+  test('startSession respects explicit endsAt', () async {
+    final policies = _MemPolicyRepo();
+    final sessions = _MemSessionRepo();
+    final engine = _FakeEngine();
+
+    final policy = FocusPolicy(
+      id: 'p1',
+      name: 'Policy',
+      allowedApps: const [
+        AppIdentifier(platform: AppPlatform.android, id: 'a')
+      ],
+      friction: FocusFrictionSettings.defaults,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    await policies.upsertPolicy(policy);
+
+    final container = ProviderContainer(
+      overrides: [
+        focusPolicyRepositoryProvider.overrideWithValue(policies),
+        focusSessionRepositoryProvider.overrideWithValue(sessions),
+        restrictionEngineProvider.overrideWithValue(engine),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    // Seed policy list.
+    await container.read(focusPolicyListProvider.future);
+
+    final now = DateTime.now();
+    final endsAt = now.add(const Duration(minutes: 5));
+
+    await container.read(activeFocusSessionProvider.notifier).startSession(
+          policyId: 'p1',
+          endsAt: endsAt,
+        );
+
+    final active = container.read(activeFocusSessionProvider).valueOrNull;
+    expect(active, isNotNull);
+    expect(active?.plannedEndAt, endsAt);
+    expect(engine.started, true);
+  });
 }
 
 class _MemPolicyRepo implements FocusPolicyRepository {

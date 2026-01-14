@@ -61,6 +61,7 @@ class AppScaffold extends ConsumerWidget {
             child: body,
           )
         : ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: EdgeInsets.only(
               left: baseHorizontalPadding + extraLeft,
               right: baseHorizontalPadding + extraRight,
@@ -69,6 +70,12 @@ class AppScaffold extends ConsumerWidget {
             ),
             children: children,
           );
+
+    final tapToDismiss = GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      child: builtBody,
+    );
 
     return Scaffold(
       appBar: AppBar(title: Text(title), actions: actions),
@@ -105,12 +112,12 @@ class AppScaffold extends ConsumerWidget {
                             width: 1,
                             child: ColoredBox(color: dividerColor),
                           ),
-                          builtBody,
+                          tapToDismiss,
                         ],
                       );
                     },
                   )
-                : builtBody,
+                : tapToDismiss,
           ),
         ),
       ),

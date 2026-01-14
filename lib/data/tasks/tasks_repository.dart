@@ -19,6 +19,7 @@ abstract interface class TasksRepository {
     required String id,
     String? title,
     String? details,
+    Object? goalYmd = tasksRepositoryUnset,
     String? starterStep,
     Object? estimatedMinutes = tasksRepositoryUnset,
     TaskType? type,
@@ -26,6 +27,7 @@ abstract interface class TasksRepository {
     /// YYYY-MM-DD
     String? ymd,
     bool? completed,
+    bool? inProgress,
   });
 
   Future<void> delete({required String id});
