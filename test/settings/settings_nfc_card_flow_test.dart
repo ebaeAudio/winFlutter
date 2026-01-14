@@ -64,8 +64,9 @@ void main() {
       final pairTile = find.widgetWithText(ListTile, 'Pair NFC card');
       expect(pairTile, findsOneWidget);
 
-      final scrollable = find.byType(Scrollable).first;
-      await tester.dragUntilVisible(pairTile, scrollable, const Offset(0, -300));
+      final listView = find.byType(ListView);
+      expect(listView, findsOneWidget);
+      await tester.dragUntilVisible(pairTile, listView, const Offset(0, -500));
       await tester.tap(pairTile);
       await tester.pumpAndSettle();
 
@@ -94,8 +95,9 @@ void main() {
       await pumpSettings(tester, prefs);
 
       final pairedTile = find.widgetWithText(ListTile, 'NFC card paired');
-      final scrollable = find.byType(Scrollable).first;
-      await tester.dragUntilVisible(pairedTile, scrollable, const Offset(0, -300));
+      final listView = find.byType(ListView);
+      expect(listView, findsOneWidget);
+      await tester.dragUntilVisible(pairedTile, listView, const Offset(0, -500));
       await tester.tap(pairedTile);
       await tester.pumpAndSettle();
 
@@ -121,8 +123,9 @@ void main() {
       await pumpSettings(tester, prefs);
 
       final pairedTile = find.widgetWithText(ListTile, 'NFC card paired');
-      final scrollable = find.byType(Scrollable).first;
-      await tester.dragUntilVisible(pairedTile, scrollable, const Offset(0, -300));
+      final listView = find.byType(ListView);
+      expect(listView, findsOneWidget);
+      await tester.dragUntilVisible(pairedTile, listView, const Offset(0, -500));
       await tester.tap(pairedTile);
       await tester.pumpAndSettle();
 
@@ -155,7 +158,9 @@ void main() {
       await pumpSettings(tester, prefs);
 
       final pairedTile = find.widgetWithText(ListTile, 'NFC card paired');
-      await tester.scrollUntilVisible(pairedTile, 200);
+      final listView = find.byType(ListView);
+      expect(listView, findsOneWidget);
+      await tester.dragUntilVisible(pairedTile, listView, const Offset(0, -500));
       await tester.tap(pairedTile);
       await tester.pumpAndSettle();
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,28 +10,87 @@ import '../../../domain/focus/focus_session.dart';
 import '../../../domain/focus/focus_policy.dart';
 import '../../../domain/focus/focus_friction.dart';
 import '../../../ui/app_scaffold.dart';
+import '../../../ui/spacing.dart';
 import '../../../app/user_settings.dart';
+import '../../../platform/sound/sound_service.dart';
 import '../../../platform/nfc/nfc_card_service.dart';
 import '../../../platform/nfc/nfc_scan_purpose.dart';
 import '../../../platform/nfc/nfc_scan_service.dart';
+import '../../../ui/components/w_drop_celebration_overlay.dart';
 import '../../today/today_controller.dart';
 import '../../today/today_timebox_controller.dart';
 import '../dumb_phone_session_gate_controller.dart';
 import '../focus_policy_controller.dart';
 import '../focus_session_controller.dart';
 import '../focus_ticker_provider.dart';
+import '../w_celebration_decider.dart';
 import 'widgets/hold_to_confirm_button.dart';
+import '../../../ui/components/clown_cam_gate_sheet.dart';
 
-class FocusDashboardScreen extends ConsumerWidget {
+class FocusDashboardScreen extends ConsumerStatefulWidget {
   const FocusDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FocusDashboardScreen> createState() =>
+      _FocusDashboardScreenState();
+}
+
+class _FocusDashboardScreenState extends ConsumerState<FocusDashboardScreen> {
+  static const double _kWCelebrationChance = 0.28;
+  late final WCelebrationDecider _wCelebration =
+      WCelebrationDecider(chance: _kWCelebrationChance);
+
+  bool _showW = false;
+
+  void _triggerWTest() {
+    // The overlay plays when `play` flips false -> true.
+    if (_showW) {
+      setState(() => _showW = false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _showW = true);
+      });
+      return;
+    }
+    setState(() => _showW = true);
+  }
+
+  void _maybeTriggerWCelebration({
+    required AsyncValue<FocusSession?>? previous,
+    required AsyncValue<FocusSession?> next,
+  }) {
+    final prevSession = previous?.valueOrNull;
+    final nextSession = next.valueOrNull;
+    if (prevSession == null) return;
+
+    // Transition: active -> none (ended)
+    if (prevSession.isActive && nextSession == null && !next.isLoading) {
+      final now = DateTime.now();
+      final shouldPlay = _wCelebration.shouldCelebrateCompletedSession(
+        session: prevSession,
+        now: now,
+      );
+      if (!shouldPlay) return;
+
+      if (mounted) {
+        setState(() => _showW = true);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<AsyncValue<FocusSession?>>(
+      activeFocusSessionProvider,
+      (previous, next) => _maybeTriggerWCelebration(previous: previous, next: next),
+    );
+
     final active = ref.watch(activeFocusSessionProvider);
     final policies = ref.watch(focusPolicyListProvider);
 
     return AppScaffold(
       title: 'Dumb Phone Mode',
+      children: const [],
       actions: [
         IconButton(
           tooltip: 'History',
@@ -42,46 +103,74 @@ class FocusDashboardScreen extends ConsumerWidget {
           icon: const Icon(Icons.tune),
         ),
       ],
-      children: [
-        Builder(
-          builder: (context) {
-            final session = active.valueOrNull;
-            // If we're loading but still have the previous session, treat this as
-            // "ending..." rather than a full blank loading state.
-            final isEnding = active.isLoading && session != null;
+      body: Stack(
+        children: [
+          ListView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.all(AppSpace.s16),
+            children: [
+              Builder(
+                builder: (context) {
+                  final session = active.valueOrNull;
+                  // If we're loading but still have the previous session, treat this as
+                  // "ending..." rather than a full blank loading state.
+                  final isEnding = active.isLoading && session != null;
 
-            if (active.isLoading && session == null) {
-              return const Center(child: CircularProgressIndicator());
-            }
+                  if (active.isLoading && session == null) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-            if (active.hasError && session == null) {
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text('Session error: ${active.error}'),
+                  if (active.hasError && session == null) {
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpace.s12),
+                        child: Text('Session error: ${active.error}'),
+                      ),
+                    );
+                  }
+
+                  return _ActiveSessionCard(
+                    session: session,
+                    isEnding: isEnding,
+                    error: active.hasError ? active.error : null,
+                  );
+                },
+              ),
+              Gap.h12,
+              policies.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpace.s12),
+                    child: Text('Failed to load policies: $e'),
+                  ),
                 ),
-              );
-            }
-
-            return _ActiveSessionCard(
-              session: session,
-              isEnding: isEnding,
-              error: active.hasError ? active.error : null,
-            );
-          },
-        ),
-        const SizedBox(height: 12),
-        policies.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text('Failed to load policies: $e'),
+                data: (items) => _StartSessionCard(
+                  policies: items,
+                  onTestCelebration: kDebugMode ? _triggerWTest : null,
+                ),
+              ),
+            ],
+          ),
+          Positioned.fill(
+            child: WDropCelebrationOverlay(
+              play: _showW,
+              // Rain W's for 3 seconds, and let each one fall through after spawning.
+              particleCount: 90,
+              emitDuration: const Duration(seconds: 3),
+              fallDuration: const Duration(milliseconds: 1800),
+              onSpawn: () {
+                final sound = ref.read(soundServiceProvider);
+                unawaited(sound.playRapid(AppSfx.wDrop));
+              },
+              onCompleted: () {
+                if (!mounted) return;
+                setState(() => _showW = false);
+              },
             ),
           ),
-          data: (items) => _StartSessionCard(policies: items),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -148,6 +237,7 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
     final friction = policy?.friction ?? FocusFrictionSettings.defaults;
     final gate = ref.watch(dumbPhoneSessionGateControllerProvider).valueOrNull;
     final requireCardToEndEarly = gate?.requireCardToEndEarly == true;
+    final requireSelfieToEndEarly = gate?.requireSelfieToEndEarly == true;
 
     // Ensure we auto-complete once the timer elapses.
     // IMPORTANT: Do not modify providers during build; defer to after the frame.
@@ -155,6 +245,7 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
         _didScheduleReconcileForSessionId != session.id) {
       _didScheduleReconcileForSessionId = session.id;
       final activeController = ref.read(activeFocusSessionProvider.notifier);
+      unawaited(ref.read(soundServiceProvider).play(AppSfx.focusEnd));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         // Avoid using `ref` in an async/post-frame callback; the widget might be disposed.
         activeController.reconcileIfExpired();
@@ -194,9 +285,13 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
             const SizedBox(height: 12),
             HoldToConfirmButton(
               holdDuration: Duration(seconds: friction.holdToUnlockSeconds),
-              label: requireCardToEndEarly
-                  ? 'Hold, then scan card to end'
-                  : 'Hold to end session early',
+              label: requireCardToEndEarly && requireSelfieToEndEarly
+                  ? 'Hold, scan card, then clown cam to end'
+                  : requireCardToEndEarly
+                      ? 'Hold, then scan card to end'
+                      : requireSelfieToEndEarly
+                          ? 'Hold, then clown cam to end'
+                          : 'Hold to end session early',
               icon: Icons.stop_circle,
               enabled: !widget.isEnding,
               busyLabel: 'Ending…',
@@ -245,18 +340,47 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
                   return ok;
                 }
 
+                Future<bool> ensureSelfieValidated(BuildContext ctx) async {
+                  if (!requireSelfieToEndEarly) return true;
+                  if (kIsWeb) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(
+                          content: Text('Selfie verification is not supported on web.'),
+                        ),
+                      );
+                    }
+                    return false;
+                  }
+                  return await ClownCamGateSheet.show(ctx);
+                }
+
                 await gateController.endSession(
                   context: context,
                   reason: FocusSessionEndReason.userEarlyExit,
                   ensureCardValidated: ensureCardValidated,
+                  ensureSelfieValidated: ensureSelfieValidated,
                 );
+
+                if (!context.mounted) return;
+                final stillActive =
+                    ref.read(activeFocusSessionProvider).valueOrNull?.isActive ==
+                        true;
+                if (!stillActive) {
+                  unawaited(
+                      ref.read(soundServiceProvider).play(AppSfx.focusEnd));
+                }
               },
             ),
             const SizedBox(height: 8),
             Text(
-              requireCardToEndEarly
-                  ? 'To end early: open Dumb Phone Mode → hold for ${friction.holdToUnlockSeconds}s, wait ${friction.unlockDelaySeconds}s, then scan your paired card.'
-                  : 'To end early: open Dumb Phone Mode → hold for ${friction.holdToUnlockSeconds}s, then wait ${friction.unlockDelaySeconds}s.',
+              requireCardToEndEarly && requireSelfieToEndEarly
+                  ? 'To end early: open Dumb Phone Mode → hold for ${friction.holdToUnlockSeconds}s, wait ${friction.unlockDelaySeconds}s, scan your paired card, then do the clown cam check.'
+                  : requireCardToEndEarly
+                      ? 'To end early: open Dumb Phone Mode → hold for ${friction.holdToUnlockSeconds}s, wait ${friction.unlockDelaySeconds}s, then scan your paired card.'
+                      : requireSelfieToEndEarly
+                          ? 'To end early: open Dumb Phone Mode → hold for ${friction.holdToUnlockSeconds}s, wait ${friction.unlockDelaySeconds}s, then do the clown cam check.'
+                          : 'To end early: open Dumb Phone Mode → hold for ${friction.holdToUnlockSeconds}s, then wait ${friction.unlockDelaySeconds}s.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -274,9 +398,13 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
 }
 
 class _StartSessionCard extends ConsumerStatefulWidget {
-  const _StartSessionCard({required this.policies});
+  const _StartSessionCard({
+    required this.policies,
+    this.onTestCelebration,
+  });
 
   final List<FocusPolicy> policies;
+  final VoidCallback? onTestCelebration;
 
   @override
   ConsumerState<_StartSessionCard> createState() => _StartSessionCardState();
@@ -307,6 +435,7 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
     final settings = ref.watch(userSettingsControllerProvider);
     final gate = ref.watch(dumbPhoneSessionGateControllerProvider).valueOrNull;
     final requireCardToEndEarly = gate?.requireCardToEndEarly == true;
+    final requireSelfieToEndEarly = gate?.requireSelfieToEndEarly == true;
     final now = DateTime.now();
     final endAt = _endAtForToday(now: now);
     final endAtIsValid = endAt != null && endAt.isAfter(now);
@@ -429,72 +558,96 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                 ],
             ],
             const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: startDisabled
-                  ? null
-                  : policies.isEmpty || _policyId == null
-                      ? () => context.go('/focus/policies')
-                      : () async {
-                          final now = DateTime.now();
-                      final policy = selected;
-                      if (policy == null) return;
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: startDisabled
+                        ? null
+                        : policies.isEmpty || _policyId == null
+                            ? () => context.go('/focus/policies')
+                            : () async {
+                                final now = DateTime.now();
+                                final policy = selected;
+                                if (policy == null) return;
 
-                          final computedEndsAt =
-                              _mode == _StartSessionMode.duration
-                                  ? now.add(Duration(minutes: _minutes.toInt()))
-                                  : _endAtForToday(now: now)!;
-                          final computedDuration =
-                              _mode == _StartSessionMode.duration
-                                  ? Duration(minutes: _minutes.toInt())
-                                  : computedEndsAt.difference(now);
+                                final computedEndsAt =
+                                    _mode == _StartSessionMode.duration
+                                        ? now.add(
+                                            Duration(minutes: _minutes.toInt()),
+                                          )
+                                        : _endAtForToday(now: now)!;
+                                final computedDuration =
+                                    _mode == _StartSessionMode.duration
+                                        ? Duration(minutes: _minutes.toInt())
+                                        : computedEndsAt.difference(now);
 
-                          final ok = await _confirmStart(
-                            context: context,
-                            policy: policy,
-                            endsAt: computedEndsAt,
-                            duration: computedDuration,
-                            requireCardToEndEarly: requireCardToEndEarly,
-                          );
-                          if (!ok) return;
-                          if (!context.mounted) return;
+                                final ok = await _confirmStart(
+                                  context: context,
+                                  policy: policy,
+                                  endsAt: computedEndsAt,
+                                  duration: computedDuration,
+                                  requireCardToEndEarly: requireCardToEndEarly,
+                                  requireSelfieToEndEarly:
+                                      requireSelfieToEndEarly,
+                                );
+                                if (!ok) return;
+                                if (!context.mounted) return;
 
-                          final gateController = ref.read(
-                            dumbPhoneSessionGateControllerProvider.notifier,
-                          );
+                                final gateController = ref.read(
+                                  dumbPhoneSessionGateControllerProvider.notifier,
+                                );
 
-                          final started = await gateController.startSession(
-                            context: context,
-                            policyId: policy.id,
-                            duration: _mode == _StartSessionMode.duration
-                                ? Duration(minutes: _minutes.toInt())
-                                : null,
-                            endsAt: _mode == _StartSessionMode.endAt
-                                ? computedEndsAt
-                                : null,
-                          );
-                          if (!started) return;
+                                final started = await gateController.startSession(
+                                  context: context,
+                                  policyId: policy.id,
+                                  duration: _mode == _StartSessionMode.duration
+                                      ? Duration(minutes: _minutes.toInt())
+                                      : null,
+                                  endsAt: _mode == _StartSessionMode.endAt
+                                      ? computedEndsAt
+                                      : null,
+                                );
+                                if (!started) return;
 
-                          if (!context.mounted) return;
-                          final ymd =
-                              DateFormat('yyyy-MM-dd').format(DateTime.now());
-                          await ref
-                              .read(todayControllerProvider(ymd).notifier)
-                              .enableFocusModeAndSelectDefaultTask();
-                          if (settings.dumbPhoneAutoStart25mTimebox) {
-                            await ref
-                                .read(todayTimeboxControllerProvider(ymd)
-                                    .notifier)
-                                .queuePendingAutoStart25m();
-                          }
-                          if (!context.mounted) return;
-                          context.go('/today');
-                        },
-              icon: const Icon(Icons.play_arrow),
-              label: Text(
-                policies.isEmpty
-                    ? 'Create a policy'
-                    : 'Start session',
-              ),
+                                if (!context.mounted) return;
+                                unawaited(
+                                  ref
+                                      .read(soundServiceProvider)
+                                      .play(AppSfx.focusStart),
+                                );
+                                final ymd = DateFormat('yyyy-MM-dd')
+                                    .format(DateTime.now());
+                                await ref
+                                    .read(todayControllerProvider(ymd).notifier)
+                                    .enableFocusModeAndSelectDefaultTask();
+                                if (settings.dumbPhoneAutoStart25mTimebox) {
+                                  await ref
+                                      .read(todayTimeboxControllerProvider(ymd)
+                                          .notifier)
+                                      .queuePendingAutoStart25m();
+                                }
+                                if (!context.mounted) return;
+                                context.go('/today');
+                              },
+                    icon: const Icon(Icons.play_arrow),
+                    label: Text(
+                      policies.isEmpty ? 'Create a policy' : 'Start session',
+                    ),
+                  ),
+                ),
+                if (widget.onTestCelebration != null) ...[
+                  Gap.w12,
+                  OutlinedButton.icon(
+                    onPressed: widget.onTestCelebration,
+                    icon: const Text(
+                      'W',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    label: const Text('Test'),
+                  ),
+                ],
+              ],
             ),
           ],
         ),
@@ -508,6 +661,7 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
     required DateTime endsAt,
     required Duration duration,
     required bool requireCardToEndEarly,
+    required bool requireSelfieToEndEarly,
   }) async {
     final isIOS = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
     final isAndroid =
@@ -567,6 +721,12 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                     const SizedBox(height: 6),
                     const Text(
                       'Because “Require NFC card to end early” is enabled, you’ll also need to scan your paired card.',
+                    ),
+                  ],
+                  if (requireSelfieToEndEarly) ...[
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Because “Require clown camera check to end early” is enabled, you’ll also need to open the selfie camera with the overlay (no photo is taken).',
                     ),
                   ],
                   if (isAndroid) ...[

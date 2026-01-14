@@ -232,10 +232,215 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
     }
   }
 
+  Widget _buildTasksBody({
+    required AllTasksRepository repo,
+    required List<AllTask> all,
+    required AllTasksQuery query,
+    required String todayYmd,
+  }) {
+    final filtered = applyAllTasksQuery(
+      all: all,
+      query: query,
+      todayYmd: todayYmd,
+    );
+
+    if (filtered.isEmpty) {
+      return EmptyStateCard(
+        icon: Icons.check_circle_outline,
+        title: 'Nothing matches',
+        description: 'Try a different search or filter.',
+        ctaLabel: 'Go to Today',
+        onCtaPressed: () => context.go('/today'),
+      );
+    }
+
+    final open = <AllTask>[];
+    var done = <AllTask>[];
+    for (final t in filtered) {
+      (t.completed ? done : open).add(t);
+    }
+
+    // `filtered` is already sorted; keep stable-ish ordering.
+    //
+    // Preserve the previous UX: when sorting by time (date/created)
+    // ascending, show Completed newest-first.
+    if ((query.sortField == AllTasksSortField.date ||
+            query.sortField == AllTasksSortField.created) &&
+        !query.sortDescending) {
+      done = done.reversed.toList(growable: false);
+    }
+
+    final overdue = <AllTask>[];
+    final todayList = <AllTask>[];
+    final upcoming = <AllTask>[];
+    if (_groupByBuckets) {
+      for (final t in open) {
+        if (t.ymd == todayYmd) {
+          todayList.add(t);
+        } else if (t.ymd.compareTo(todayYmd) < 0) {
+          overdue.add(t);
+        } else {
+          upcoming.add(t);
+        }
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_status != AllTasksStatusFilter.done) ...[
+          SectionHeader(
+            title: 'Active',
+            trailing: Text('${open.length}'),
+          ),
+          if (open.isEmpty)
+            EmptyStateCard(
+              icon: Icons.inbox_outlined,
+              title: 'No active tasks',
+              description: 'You’re clear right now.',
+              ctaLabel: 'Go to Today',
+              onCtaPressed: () => context.go('/today'),
+            )
+          else ...[
+            if (!_groupByBuckets)
+              _TasksListCard(
+                tasks: open,
+                selectMode: _selectMode,
+                selectedIds: _selected,
+                sendingToCompletedIds: _sendingToCompleted,
+                sendOffDuration: _sendOffDuration,
+                onToggleSelected: (id) => setState(() {
+                  _selected.contains(id) ? _selected.remove(id) : _selected.add(id);
+                }),
+                onToggleCompleted: (t, v) => _setCompletedWithSendOff(repo, t, v),
+                onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
+                onMoveToToday: (t) => _moveToToday(repo, t),
+                onChangeDate: (t) => _changeDate(repo, t),
+                onOpenDetails: (t) =>
+                    context.push('/today/task/${t.id}?ymd=${t.ymd}'),
+              )
+            else ...[
+              if (overdue.isNotEmpty) ...[
+                const _ListLabel(title: 'Overdue'),
+                _TasksListCard(
+                  tasks: overdue,
+                  selectMode: _selectMode,
+                  selectedIds: _selected,
+                  sendingToCompletedIds: _sendingToCompleted,
+                  sendOffDuration: _sendOffDuration,
+                  onToggleSelected: (id) => setState(() {
+                    _selected.contains(id)
+                        ? _selected.remove(id)
+                        : _selected.add(id);
+                  }),
+                  onToggleCompleted: (t, v) => _setCompletedWithSendOff(repo, t, v),
+                  onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
+                  onMoveToToday: (t) => _moveToToday(repo, t),
+                  onChangeDate: (t) => _changeDate(repo, t),
+                  onOpenDetails: (t) =>
+                      context.push('/today/task/${t.id}?ymd=${t.ymd}'),
+                ),
+                Gap.h12,
+              ],
+              if (todayList.isNotEmpty) ...[
+                const _ListLabel(title: 'Today'),
+                _TasksListCard(
+                  tasks: todayList,
+                  selectMode: _selectMode,
+                  selectedIds: _selected,
+                  sendingToCompletedIds: _sendingToCompleted,
+                  sendOffDuration: _sendOffDuration,
+                  onToggleSelected: (id) => setState(() {
+                    _selected.contains(id)
+                        ? _selected.remove(id)
+                        : _selected.add(id);
+                  }),
+                  onToggleCompleted: (t, v) => _setCompletedWithSendOff(repo, t, v),
+                  onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
+                  onMoveToToday: null,
+                  onChangeDate: (t) => _changeDate(repo, t),
+                  onOpenDetails: (t) =>
+                      context.push('/today/task/${t.id}?ymd=${t.ymd}'),
+                ),
+                Gap.h12,
+              ],
+              if (upcoming.isNotEmpty) ...[
+                const _ListLabel(title: 'Upcoming'),
+                _TasksListCard(
+                  tasks: upcoming,
+                  selectMode: _selectMode,
+                  selectedIds: _selected,
+                  sendingToCompletedIds: _sendingToCompleted,
+                  sendOffDuration: _sendOffDuration,
+                  onToggleSelected: (id) => setState(() {
+                    _selected.contains(id)
+                        ? _selected.remove(id)
+                        : _selected.add(id);
+                  }),
+                  onToggleCompleted: (t, v) => _setCompletedWithSendOff(repo, t, v),
+                  onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
+                  onMoveToToday: (t) => _moveToToday(repo, t),
+                  onChangeDate: (t) => _changeDate(repo, t),
+                  onOpenDetails: (t) =>
+                      context.push('/today/task/${t.id}?ymd=${t.ymd}'),
+                ),
+              ],
+            ],
+          ],
+        ],
+        if (_status != AllTasksStatusFilter.open) ...[
+          Gap.h16,
+          SectionHeader(
+            title: 'Completed',
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('${done.length}'),
+                Gap.w8,
+                TextButton(
+                  onPressed: done.isEmpty
+                      ? null
+                      : () => setState(() => _showCompleted = !_showCompleted),
+                  child: Text(_showCompleted ? 'Hide' : 'Show'),
+                ),
+              ],
+            ),
+          ),
+          if (done.isEmpty)
+            Text(
+              'Nothing completed yet.',
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else if (_showCompleted)
+            _TasksListCard(
+              tasks: done,
+              selectMode: _selectMode,
+              selectedIds: _selected,
+              sendingToCompletedIds: const {},
+              sendOffDuration: _sendOffDuration,
+              onToggleSelected: (id) => setState(() {
+                _selected.contains(id) ? _selected.remove(id) : _selected.add(id);
+              }),
+              onToggleCompleted: (t, v) => _setCompleted(repo, t, v),
+              onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
+              onMoveToToday: (t) => _moveToToday(repo, t),
+              onChangeDate: (t) => _changeDate(repo, t),
+              onOpenDetails: (t) =>
+                  context.push('/today/task/${t.id}?ymd=${t.ymd}'),
+            ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final repo = ref.watch(allTasksRepositoryProvider);
     final asyncTasks = repo == null ? null : ref.watch(allTasksListProvider);
+    // Avoid flashing a full-screen loading state during refreshes (e.g. after
+    // toggling completion). If we already have data, keep showing it while the
+    // provider fetches updated results in the background.
+    final cachedTasks = asyncTasks?.valueOrNull;
     final today = _todayYmd();
     final query = AllTasksQuery(
       status: _status,
@@ -342,217 +547,32 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
         else
           asyncTasks!.when(
             data: (all) {
-              final filtered = applyAllTasksQuery(
+              return _buildTasksBody(
+                repo: repo,
                 all: all,
                 query: query,
                 todayYmd: today,
               );
-
-              if (filtered.isEmpty) {
-                return EmptyStateCard(
-                  icon: Icons.check_circle_outline,
-                  title: 'Nothing matches',
-                  description:
-                      'Try a different search or filter.',
-                  ctaLabel: 'Go to Today',
-                  onCtaPressed: () => context.go('/today'),
+            },
+            loading: () {
+              // Keep showing previously loaded results while refreshing.
+              final all = cachedTasks;
+              if (all != null) {
+                return _buildTasksBody(
+                  repo: repo,
+                  all: all,
+                  query: query,
+                  todayYmd: today,
                 );
               }
 
-              final open = <AllTask>[];
-              var done = <AllTask>[];
-              for (final t in filtered) {
-                (t.completed ? done : open).add(t);
-              }
-
-              // `filtered` is already sorted; keep stable-ish ordering.
-              //
-              // Preserve the previous UX: when sorting by time (date/created)
-              // ascending, show Completed newest-first.
-              if ((query.sortField == AllTasksSortField.date ||
-                      query.sortField == AllTasksSortField.created) &&
-                  !query.sortDescending) {
-                done = done.reversed.toList(growable: false);
-              }
-
-              final overdue = <AllTask>[];
-              final todayList = <AllTask>[];
-              final upcoming = <AllTask>[];
-              if (_groupByBuckets) {
-                for (final t in open) {
-                  if (t.ymd == today) {
-                    todayList.add(t);
-                  } else if (t.ymd.compareTo(today) < 0) {
-                    overdue.add(t);
-                  } else {
-                    upcoming.add(t);
-                  }
-                }
-              }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (_status != AllTasksStatusFilter.done) ...[
-                    SectionHeader(
-                      title: 'Active',
-                      trailing: Text('${open.length}'),
-                    ),
-                    if (open.isEmpty)
-                      EmptyStateCard(
-                        icon: Icons.inbox_outlined,
-                        title: 'No active tasks',
-                        description: 'You’re clear right now.',
-                        ctaLabel: 'Go to Today',
-                        onCtaPressed: () => context.go('/today'),
-                      )
-                    else ...[
-                      if (!_groupByBuckets)
-                        _TasksListCard(
-                          tasks: open,
-                          selectMode: _selectMode,
-                          selectedIds: _selected,
-                          sendingToCompletedIds: _sendingToCompleted,
-                          sendOffDuration: _sendOffDuration,
-                          onToggleSelected: (id) => setState(() {
-                            _selected.contains(id)
-                                ? _selected.remove(id)
-                                : _selected.add(id);
-                          }),
-                          onToggleCompleted: (t, v) =>
-                              _setCompletedWithSendOff(repo, t, v),
-                          onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
-                          onMoveToToday: (t) => _moveToToday(repo, t),
-                          onChangeDate: (t) => _changeDate(repo, t),
-                          onOpenDetails: (t) =>
-                              context.push('/today/task/${t.id}?ymd=${t.ymd}'),
-                        )
-                      else ...[
-                        if (overdue.isNotEmpty) ...[
-                          const _ListLabel(title: 'Overdue'),
-                          _TasksListCard(
-                            tasks: overdue,
-                            selectMode: _selectMode,
-                            selectedIds: _selected,
-                            sendingToCompletedIds: _sendingToCompleted,
-                            sendOffDuration: _sendOffDuration,
-                            onToggleSelected: (id) => setState(() {
-                              _selected.contains(id)
-                                  ? _selected.remove(id)
-                                  : _selected.add(id);
-                            }),
-                            onToggleCompleted: (t, v) =>
-                                _setCompletedWithSendOff(repo, t, v),
-                            onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
-                            onMoveToToday: (t) => _moveToToday(repo, t),
-                            onChangeDate: (t) => _changeDate(repo, t),
-                            onOpenDetails: (t) => context
-                                .push('/today/task/${t.id}?ymd=${t.ymd}'),
-                          ),
-                          Gap.h12,
-                        ],
-                        if (todayList.isNotEmpty) ...[
-                          const _ListLabel(title: 'Today'),
-                          _TasksListCard(
-                            tasks: todayList,
-                            selectMode: _selectMode,
-                            selectedIds: _selected,
-                            sendingToCompletedIds: _sendingToCompleted,
-                            sendOffDuration: _sendOffDuration,
-                            onToggleSelected: (id) => setState(() {
-                              _selected.contains(id)
-                                  ? _selected.remove(id)
-                                  : _selected.add(id);
-                            }),
-                            onToggleCompleted: (t, v) =>
-                                _setCompletedWithSendOff(repo, t, v),
-                            onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
-                            onMoveToToday: null,
-                            onChangeDate: (t) => _changeDate(repo, t),
-                            onOpenDetails: (t) => context
-                                .push('/today/task/${t.id}?ymd=${t.ymd}'),
-                          ),
-                          Gap.h12,
-                        ],
-                        if (upcoming.isNotEmpty) ...[
-                          const _ListLabel(title: 'Upcoming'),
-                          _TasksListCard(
-                            tasks: upcoming,
-                            selectMode: _selectMode,
-                            selectedIds: _selected,
-                            sendingToCompletedIds: _sendingToCompleted,
-                            sendOffDuration: _sendOffDuration,
-                            onToggleSelected: (id) => setState(() {
-                              _selected.contains(id)
-                                  ? _selected.remove(id)
-                                  : _selected.add(id);
-                            }),
-                            onToggleCompleted: (t, v) =>
-                                _setCompletedWithSendOff(repo, t, v),
-                            onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
-                            onMoveToToday: (t) => _moveToToday(repo, t),
-                            onChangeDate: (t) => _changeDate(repo, t),
-                            onOpenDetails: (t) => context
-                                .push('/today/task/${t.id}?ymd=${t.ymd}'),
-                          ),
-                        ],
-                      ],
-                    ],
-                  ],
-                  if (_status != AllTasksStatusFilter.open) ...[
-                    Gap.h16,
-                    SectionHeader(
-                      title: 'Completed',
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('${done.length}'),
-                          Gap.w8,
-                          TextButton(
-                            onPressed: done.isEmpty
-                                ? null
-                                : () => setState(
-                                      () => _showCompleted = !_showCompleted,
-                                    ),
-                            child: Text(_showCompleted ? 'Hide' : 'Show'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (done.isEmpty)
-                      Text(
-                        'Nothing completed yet.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      )
-                    else if (_showCompleted)
-                      _TasksListCard(
-                        tasks: done,
-                        selectMode: _selectMode,
-                        selectedIds: _selected,
-                        sendingToCompletedIds: const {},
-                        sendOffDuration: _sendOffDuration,
-                        onToggleSelected: (id) => setState(() {
-                          _selected.contains(id)
-                              ? _selected.remove(id)
-                              : _selected.add(id);
-                        }),
-                        onToggleCompleted: (t, v) => _setCompleted(repo, t, v),
-                        onToggleInProgress: (t, v) => _setInProgress(repo, t, v),
-                        onMoveToToday: (t) => _moveToToday(repo, t),
-                        onChangeDate: (t) => _changeDate(repo, t),
-                        onOpenDetails: (t) =>
-                            context.push('/today/task/${t.id}?ymd=${t.ymd}'),
-                      ),
-                  ],
-                ],
+              return const Card(
+                child: Padding(
+                  padding: EdgeInsets.all(AppSpace.s16),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
               );
             },
-            loading: () => const Card(
-              child: Padding(
-                padding: EdgeInsets.all(AppSpace.s16),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            ),
             error: (_, __) => Card(
               child: Padding(
                 padding: const EdgeInsets.all(AppSpace.s16),
@@ -897,6 +917,12 @@ class _TasksListCard extends StatelessWidget {
       children: [
         for (final t in tasks)
           _SendOffTaskRow(
+            // Important: keep a stable element association per task id.
+            // Without keys, when a row is removed (e.g. after completing a task),
+            // Flutter may re-use the previous row's stateful animation elements
+            // (TweenAnimationBuilder) for the next task in the list, causing a
+            // brief "weird reload" animation.
+            key: ValueKey<String>(t.id),
             sending: !selectMode && sendingToCompletedIds.contains(t.id),
             duration: sendOffDuration,
             child: TaskListRow(
@@ -985,6 +1011,7 @@ class _TasksListCard extends StatelessWidget {
 
 class _SendOffTaskRow extends StatelessWidget {
   const _SendOffTaskRow({
+    super.key,
     required this.sending,
     required this.duration,
     required this.child,

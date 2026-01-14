@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,10 +16,13 @@ import '../../assistant/assistant_executor.dart';
 import '../../data/trackers/tracker_models.dart';
 import '../../data/tasks/task_details_providers.dart';
 import '../../ui/app_scaffold.dart';
+import '../../ui/components/assistant_preview_sheet.dart';
 import '../../ui/components/empty_state_card.dart';
+import '../../ui/components/conversation_border.dart';
 import '../../ui/components/section_header.dart';
 import '../../ui/components/task_details_sheet.dart';
 import '../../ui/spacing.dart';
+import '../../platform/sound/sound_service.dart';
 import '../tasks/task_details_screen.dart';
 import 'dashboard/dashboard_layout_controller.dart';
 import 'dashboard/dashboard_section_id.dart';
@@ -49,6 +54,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   final _reflectionFocus = FocusNode();
   final _habitAddController = TextEditingController();
   final _assistantController = TextEditingController();
+  final _assistantFocus = FocusNode();
   bool _assistantLoading = false;
   String? _assistantSay;
   bool _isCustomizingDashboard = false;
@@ -59,10 +65,16 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   bool _assistantListening = false;
   String? _assistantSpeechError;
   bool _assistantHoldArmed = false;
+  int _assistantListenSession = 0;
+  double _assistantSoundLevel01 = 0.0;
 
   static DateTime _dateOnly(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
   static bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
+
+  void _play(AppSfx sfx) {
+    unawaited(ref.read(soundServiceProvider).play(sfx));
+  }
 
   @override
   void initState() {
@@ -91,6 +103,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     _reflectionFocus.dispose();
     _habitAddController.dispose();
     _assistantController.dispose();
+    _assistantFocus.dispose();
     try {
       _speech.cancel();
     } catch (_) {
@@ -151,6 +164,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final ok = await _ensureSpeechReady();
     if (!ok) {
       if (!mounted) return;
+      _play(AppSfx.error);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_assistantSpeechError ?? 'Speech unavailable')),
       );
@@ -164,6 +178,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         _assistantSpeechError =
             'Microphone / Speech permission denied. Enable it in Settings and try again.';
       });
+      _play(AppSfx.error);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_assistantSpeechError!)),
       );
@@ -174,9 +189,18 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     setState(() {
       _assistantListening = true;
       _assistantSpeechError = null;
+      _assistantSoundLevel01 = 0.0;
     });
 
     await _speech.listen(
+      onSoundLevelChange: (level) {
+        if (!mounted) return;
+        // speech_to_text typically reports ~[-2..10]. Normalize defensively.
+        final next = ((level + 2) / 12).clamp(0.0, 1.0);
+        // Light smoothing to avoid jitter.
+        final smooth = _assistantSoundLevel01 * 0.65 + next * 0.35;
+        setState(() => _assistantSoundLevel01 = smooth);
+      },
       listenOptions: SpeechListenOptions(
         listenMode: ListenMode.confirmation,
         partialResults: true,
@@ -198,7 +222,125 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     }
     if (!mounted) return;
     HapticFeedback.selectionClick();
-    setState(() => _assistantListening = false);
+    setState(() {
+      _assistantListening = false;
+      _assistantSoundLevel01 = 0.0;
+    });
+  }
+
+  Future<void> _startAssistantListeningAndAutoRun({
+    required AssistantClient assistantClient,
+    required DateTime baseDate,
+  }) async {
+    if (_assistantLoading) return;
+
+    // If already listening, interpret a second tap as "stop + run now".
+    if (_assistantListening) {
+      await _stopAssistantListening();
+      if (!mounted) return;
+      await _runAssistant(assistantClient: assistantClient, baseDate: baseDate);
+      return;
+    }
+
+    final ok = await _ensureSpeechReady();
+    if (!ok) {
+      if (!mounted) return;
+      _play(AppSfx.error);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_assistantSpeechError ?? 'Speech unavailable')),
+      );
+      return;
+    }
+
+    final hasPerm = await _speech.hasPermission;
+    if (hasPerm == false) {
+      if (!mounted) return;
+      setState(() {
+        _assistantSpeechError =
+            'Microphone / Speech permission denied. Enable it in Settings and try again.';
+      });
+      _play(AppSfx.error);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_assistantSpeechError!)),
+      );
+      return;
+    }
+
+    // End customize mode if active; voice input should feel immediate.
+    if (_isCustomizingDashboard) {
+      setState(() => _isCustomizingDashboard = false);
+    }
+
+    // Session token prevents double-run if callbacks race.
+    final session = ++_assistantListenSession;
+
+    HapticFeedback.selectionClick();
+    setState(() {
+      _assistantListening = true;
+      _assistantSpeechError = null;
+      _assistantSoundLevel01 = 0.0;
+    });
+
+    try {
+      await _speech.listen(
+        onSoundLevelChange: (level) {
+          if (!mounted) return;
+          if (session != _assistantListenSession) return;
+          final next = ((level + 2) / 12).clamp(0.0, 1.0);
+          final smooth = _assistantSoundLevel01 * 0.65 + next * 0.35;
+          setState(() => _assistantSoundLevel01 = smooth);
+        },
+        listenOptions: SpeechListenOptions(
+          listenMode: ListenMode.confirmation,
+          partialResults: true,
+        ),
+        onResult: (result) async {
+          if (!mounted) return;
+          if (session != _assistantListenSession) return;
+
+          final words = result.recognizedWords.trim();
+          if (words.isNotEmpty) {
+            _setAssistantTranscript(words);
+          }
+
+          // When the engine considers the result final, stop listening and run.
+          if (result.finalResult) {
+            await _stopAssistantListening();
+            if (!mounted) return;
+            if (session != _assistantListenSession) return;
+            await _runAssistant(
+              assistantClient: assistantClient,
+              baseDate: baseDate,
+            );
+          }
+        },
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _assistantListening = false;
+        _assistantSoundLevel01 = 0.0;
+        _assistantSpeechError = kIsWeb
+            ? 'Speech unavailable in this environment.'
+            : 'Speech unavailable';
+      });
+      _play(AppSfx.error);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_assistantSpeechError!)),
+      );
+      return;
+    }
+
+    // Fallback: if we never receive a finalResult, stop + run after a short delay.
+    Future<void>.delayed(const Duration(seconds: 6), () async {
+      if (!mounted) return;
+      if (session != _assistantListenSession) return;
+      if (!_assistantListening) return;
+      await _stopAssistantListening();
+      if (!mounted) return;
+      if (session != _assistantListenSession) return;
+      await _runAssistant(assistantClient: assistantClient, baseDate: baseDate);
+    });
   }
 
   Future<void> _onAssistantHoldEnd({
@@ -343,36 +485,53 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   child: Padding(
                     padding: const EdgeInsets.all(AppSpace.s16),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(friendly,
-                            style: Theme.of(context).textTheme.titleLarge),
-                        Gap.h4,
-                        Text(ymd, style: Theme.of(context).textTheme.bodySmall),
-                        Gap.h16,
-                        Wrap(
-                          spacing: AppSpace.s8,
-                          runSpacing: AppSpace.s8,
-                          children: [
-                            OutlinedButton.icon(
-                              onPressed: () => setState(() => _date =
-                                  _date.subtract(const Duration(days: 1))),
-                              icon: const Icon(Icons.chevron_left),
-                              label: const Text('Prev'),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: () => setState(() =>
-                                  _date = _date.add(const Duration(days: 1))),
-                              icon: const Icon(Icons.chevron_right),
-                              label: const Text('Next'),
-                            ),
-                            if (!isToday)
-                              FilledButton.icon(
-                                onPressed: () => setState(() => _date = now),
-                                icon: const Icon(Icons.today),
-                                label: const Text('Go to Today'),
+                        Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                friendly,
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.titleLarge,
                               ),
-                          ],
+                              Gap.h4,
+                              Text(
+                                ymd,
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Gap.h16,
+                        Center(
+                          child: Wrap(
+                            spacing: AppSpace.s8,
+                            runSpacing: AppSpace.s8,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: () => setState(() => _date =
+                                    _date.subtract(const Duration(days: 1))),
+                                icon: const Icon(Icons.chevron_left),
+                                label: const Text('Prev'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () => setState(() => _date =
+                                    _date.add(const Duration(days: 1))),
+                                icon: const Icon(Icons.chevron_right),
+                                label: const Text('Next'),
+                              ),
+                              if (!isToday)
+                                FilledButton.icon(
+                                  onPressed: () => setState(() => _date = now),
+                                  icon: const Icon(Icons.today),
+                                  label: const Text('Go to Today'),
+                                ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -421,6 +580,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                   Expanded(
                                     child: TextField(
                                       controller: _assistantController,
+                                      focusNode: _assistantFocus,
                                       textInputAction: TextInputAction.send,
                                       onSubmitted: (_) => _runAssistant(
                                         assistantClient: assistantClient,
@@ -834,10 +994,14 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           for (final h in habits)
                             CheckboxListTile(
                               value: h.completed,
-                              onChanged: (v) => controller.setHabitCompleted(
-                                habitId: h.id,
-                                completed: v == true,
-                              ),
+                              onChanged: (v) async {
+                                final next = v == true;
+                                await controller.setHabitCompleted(
+                                  habitId: h.id,
+                                  completed: next,
+                                );
+                                if (next) _play(AppSfx.habitComplete);
+                              },
                               title: Text(h.name),
                             ),
                           Padding(
@@ -973,18 +1137,22 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                                 progress: it.item.hasTarget
                                                     ? '${it.progressCount}/${it.item.targetValue}'
                                                     : null,
-                                                onIncrement: () =>
-                                                    trackersController
-                                                        .increment(
-                                                  trackerId: t.tracker.id,
-                                                  itemKey: it.item.key,
-                                                ),
-                                                onDecrement: () =>
-                                                    trackersController
-                                                        .decrement(
-                                                  trackerId: t.tracker.id,
-                                                  itemKey: it.item.key,
-                                                ),
+                                                onIncrement: () async {
+                                                  await trackersController
+                                                      .increment(
+                                                    trackerId: t.tracker.id,
+                                                    itemKey: it.item.key,
+                                                  );
+                                                  _play(AppSfx.trackerUp);
+                                                },
+                                                onDecrement: () async {
+                                                  await trackersController
+                                                      .decrement(
+                                                    trackerId: t.tracker.id,
+                                                    itemKey: it.item.key,
+                                                  );
+                                                  _play(AppSfx.trackerDown);
+                                                },
                                               ),
                                             ),
                                         ],
@@ -1032,7 +1200,44 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   _TasksCard(
                     tasks: mustWins,
                     ymd: ymd,
-                    onToggle: controller.toggleTaskCompleted,
+                    onToggle: (taskId) async {
+                      final beforeDay = ref.read(todayControllerProvider(ymd));
+                      bool wasCompleted = false;
+                      for (final t in beforeDay.tasks) {
+                        if (t.id == taskId) {
+                          wasCompleted = t.completed;
+                          break;
+                        }
+                      }
+
+                      await controller.toggleTaskCompleted(taskId);
+
+                      final afterDay = ref.read(todayControllerProvider(ymd));
+                      bool isCompleted = false;
+                      TodayTaskType? afterType;
+                      for (final t in afterDay.tasks) {
+                        if (t.id == taskId) {
+                          isCompleted = t.completed;
+                          afterType = t.type;
+                          break;
+                        }
+                      }
+
+                      if (!wasCompleted && isCompleted) {
+                        if (afterType == TodayTaskType.mustWin) {
+                          final mustWinsAfter = afterDay.tasks
+                              .where((t) => t.type == TodayTaskType.mustWin)
+                              .toList();
+                          final allMustWinsDone = mustWinsAfter.isNotEmpty &&
+                              mustWinsAfter.every((t) => t.completed);
+                          _play(allMustWinsDone
+                              ? AppSfx.bigWin
+                              : AppSfx.taskComplete);
+                        } else {
+                          _play(AppSfx.taskComplete);
+                        }
+                      }
+                    },
                     onSetInProgress: controller.setTaskInProgress,
                     onEdit: (id, current) => _editTask(
                       context,
@@ -1096,7 +1301,31 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   _TasksCard(
                     tasks: niceTodos,
                     ymd: ymd,
-                    onToggle: controller.toggleTaskCompleted,
+                    onToggle: (taskId) async {
+                      final beforeDay = ref.read(todayControllerProvider(ymd));
+                      bool wasCompleted = false;
+                      for (final t in beforeDay.tasks) {
+                        if (t.id == taskId) {
+                          wasCompleted = t.completed;
+                          break;
+                        }
+                      }
+
+                      await controller.toggleTaskCompleted(taskId);
+
+                      final afterDay = ref.read(todayControllerProvider(ymd));
+                      bool isCompleted = false;
+                      for (final t in afterDay.tasks) {
+                        if (t.id == taskId) {
+                          isCompleted = t.completed;
+                          break;
+                        }
+                      }
+
+                      if (!wasCompleted && isCompleted) {
+                        _play(AppSfx.taskComplete);
+                      }
+                    },
                     onSetInProgress: controller.setTaskInProgress,
                     onEdit: (id, current) => _editTask(
                       context,
@@ -1221,6 +1450,19 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           ],
         ),
       ],
+      floatingActionButton: ConversationBorder(
+        active: _assistantListening,
+        level: _assistantSoundLevel01,
+        child: FloatingActionButton.extended(
+          onPressed: () => _startAssistantListeningAndAutoRun(
+            assistantClient: assistantClient,
+            baseDate: _date,
+          ),
+          icon: Icon(_assistantListening ? Icons.mic : Icons.auto_awesome),
+          label: const Text('AI'),
+          tooltip: _assistantListening ? 'Listening… tap to run now' : 'AI',
+        ),
+      ),
       body: _isCustomizingDashboard
           ? ReorderableListView.builder(
               padding: const EdgeInsets.all(AppSpace.s16),
@@ -1278,6 +1520,25 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       if (!mounted) return;
       setState(() => _assistantSay = translation.say);
 
+      final hasAction = translation.commands.any(
+        (c) => c.kind != 'date.shift' && c.kind != 'date.set',
+      );
+
+      // Preview before executing (builds trust and avoids surprises).
+      if (translation.commands.isNotEmpty && hasAction) {
+        final run = await showModalBottomSheet<bool>(
+          context: context,
+          showDragHandle: true,
+          isScrollControlled: true,
+          builder: (context) => AssistantPreviewSheet(
+            baseDate: baseDate,
+            say: translation.say,
+            commands: translation.commands,
+          ),
+        ).then((v) => v == true);
+        if (!run) return;
+      }
+
       const executor = AssistantExecutor();
       final result = await executor.execute(
         context: context,
@@ -1300,16 +1561,19 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             ],
           ),
         ).then((v) => v == true),
+        alreadyPreviewed: translation.commands.isNotEmpty && hasAction,
       );
 
       if (!mounted) return;
 
       if (result.executedCount > 0) {
+        _play(AppSfx.assistantDone);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Done (${result.executedCount})')),
         );
       }
       if (result.errors.isNotEmpty) {
+        _play(AppSfx.error);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result.errors.first)),
         );

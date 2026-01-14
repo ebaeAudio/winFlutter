@@ -1,2 +1,6 @@
 #include? "../Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
 #include? "Generated.xcconfig"
+
+// Xcode can fail the build if the entitlements file is touched/rewritten during signing.
+// This opts out of that validation (recommended by the Xcode error message).
+CODE_SIGN_ALLOW_ENTITLEMENTS_MODIFICATION = YES

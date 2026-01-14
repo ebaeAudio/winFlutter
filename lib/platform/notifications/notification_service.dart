@@ -62,7 +62,11 @@ class NotificationService {
     );
 
     await _plugin.initialize(
-      const InitializationSettings(android: androidInit, iOS: darwinInit),
+      const InitializationSettings(
+        android: androidInit,
+        iOS: darwinInit,
+        macOS: darwinInit,
+      ),
       onDidReceiveNotificationResponse: (response) {
         final route = _routeFromPayload(response.payload);
         if (route != null) onDeepLink(route);
@@ -94,12 +98,22 @@ class NotificationService {
     // Web: no local notifications.
     if (kIsWeb) return false;
 
-    if (defaultTargetPlatform == TargetPlatform.iOS ||
-        defaultTargetPlatform == TargetPlatform.macOS) {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
       final ios = _plugin.resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin>();
       final granted =
           await ios?.requestPermissions(alert: true, badge: true, sound: true);
+      return granted ?? false;
+    }
+
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      final macos = _plugin.resolvePlatformSpecificImplementation<
+          MacOSFlutterLocalNotificationsPlugin>();
+      final granted = await macos?.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
       return granted ?? false;
     }
 
@@ -151,6 +165,7 @@ class NotificationService {
           priority: Priority.high,
         ),
         iOS: DarwinNotificationDetails(),
+        macOS: DarwinNotificationDetails(),
       ),
       payload: route,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,

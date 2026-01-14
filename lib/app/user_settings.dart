@@ -20,18 +20,21 @@ enum OneHandModeHand {
 class UserSettings {
   const UserSettings({
     required this.dumbPhoneAutoStart25mTimebox,
+    required this.soundsEnabled,
     required this.oneHandModeEnabled,
     required this.oneHandModeHand,
     required this.disableHorizontalScreenPadding,
   });
 
   final bool dumbPhoneAutoStart25mTimebox;
+  final bool soundsEnabled;
   final bool oneHandModeEnabled;
   final OneHandModeHand oneHandModeHand;
   final bool disableHorizontalScreenPadding;
 
   UserSettings copyWith({
     bool? dumbPhoneAutoStart25mTimebox,
+    bool? soundsEnabled,
     bool? oneHandModeEnabled,
     OneHandModeHand? oneHandModeHand,
     bool? disableHorizontalScreenPadding,
@@ -39,6 +42,7 @@ class UserSettings {
     return UserSettings(
       dumbPhoneAutoStart25mTimebox:
           dumbPhoneAutoStart25mTimebox ?? this.dumbPhoneAutoStart25mTimebox,
+      soundsEnabled: soundsEnabled ?? this.soundsEnabled,
       oneHandModeEnabled: oneHandModeEnabled ?? this.oneHandModeEnabled,
       oneHandModeHand: oneHandModeHand ?? this.oneHandModeHand,
       disableHorizontalScreenPadding:
@@ -59,6 +63,7 @@ class UserSettingsController extends StateNotifier<UserSettings> {
           UserSettings(
             dumbPhoneAutoStart25mTimebox:
                 _prefs.getBool(_kDumbPhoneAutoStart25mTimebox) ?? false,
+            soundsEnabled: _prefs.getBool(_kSoundsEnabled) ?? true,
             oneHandModeEnabled: _prefs.getBool(_kOneHandModeEnabled) ?? false,
             oneHandModeHand: OneHandModeHand.fromString(
               _prefs.getString(_kOneHandModeHand),
@@ -72,6 +77,7 @@ class UserSettingsController extends StateNotifier<UserSettings> {
 
   static const _kDumbPhoneAutoStart25mTimebox =
       'settings_dumb_phone_auto_start_25m_timebox';
+  static const _kSoundsEnabled = 'settings_sounds_enabled_v1';
   static const _kOneHandModeEnabled = 'settings_one_hand_mode_enabled';
   static const _kOneHandModeHand = 'settings_one_hand_mode_hand';
   static const _kDisableHorizontalScreenPadding =
@@ -80,6 +86,11 @@ class UserSettingsController extends StateNotifier<UserSettings> {
   Future<void> setDumbPhoneAutoStart25mTimebox(bool enabled) async {
     state = state.copyWith(dumbPhoneAutoStart25mTimebox: enabled);
     await _prefs.setBool(_kDumbPhoneAutoStart25mTimebox, enabled);
+  }
+
+  Future<void> setSoundsEnabled(bool enabled) async {
+    state = state.copyWith(soundsEnabled: enabled);
+    await _prefs.setBool(_kSoundsEnabled, enabled);
   }
 
   Future<void> setOneHandModeEnabled(bool enabled) async {

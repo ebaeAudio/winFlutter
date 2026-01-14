@@ -45,6 +45,8 @@
 	</array>
 	<key>NSFamilyControlsUsageDescription</key>
 	<string>Win The Year needs access to Screen Time to help you block distracting apps and stay focused during focus mode. This allows the app to restrict access to apps you choose.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Win The Year uses the camera for a “clown check” when ending Dumb Phone Mode early. No photo is taken or saved.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Allow local network access to enable Flutter debugging and connect to the Dart VM service during development.</string>
 	<key>NSMicrophoneUsageDescription</key>

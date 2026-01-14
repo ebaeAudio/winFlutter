@@ -17,6 +17,7 @@ class DumbPhoneSessionGateState {
     required this.sessionStartedAt,
     required this.pairedCardKeyHash,
     required this.requireCardToEndEarly,
+    required this.requireSelfieToEndEarly,
     required this.requireCardToStart,
   });
 
@@ -32,6 +33,11 @@ class DumbPhoneSessionGateState {
   /// paired card. Normal timer completion still ends automatically.
   final bool requireCardToEndEarly;
 
+  /// Optional friction: when ON, ending a session early requires taking a selfie
+  /// (camera capture + explicit confirmation). Normal timer completion still ends
+  /// automatically.
+  final bool requireSelfieToEndEarly;
+
   /// (Future) Require scanning the paired card to start a session.
   ///
   /// v1: always false; start remains software-driven via UI.
@@ -44,6 +50,7 @@ class DumbPhoneSessionGateState {
     Object? sessionStartedAt = _unset,
     Object? pairedCardKeyHash = _unset,
     bool? requireCardToEndEarly,
+    bool? requireSelfieToEndEarly,
     bool? requireCardToStart,
   }) {
     return DumbPhoneSessionGateState(
@@ -55,6 +62,8 @@ class DumbPhoneSessionGateState {
           ? this.pairedCardKeyHash
           : pairedCardKeyHash as String?,
       requireCardToEndEarly: requireCardToEndEarly ?? this.requireCardToEndEarly,
+      requireSelfieToEndEarly:
+          requireSelfieToEndEarly ?? this.requireSelfieToEndEarly,
       requireCardToStart: requireCardToStart ?? this.requireCardToStart,
     );
   }
@@ -78,6 +87,8 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
   // New split flags (v1 for this split).
   static const _kRequireCardToEndEarly =
       'settings_dumb_phone_require_card_to_end_early_v1';
+  static const _kRequireSelfieToEndEarly =
+      'settings_dumb_phone_require_selfie_to_end_early_v1';
   static const _kRequireCardToStart =
       'settings_dumb_phone_require_card_to_start_v1';
 
@@ -110,6 +121,10 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
       unawaited(prefs.setBool(_kRequireCardToEndEarly, requireEndEarly));
     }
 
+    // v1 default: OFF (optional friction).
+    final requireSelfieEndEarly =
+        prefs.getBool(_kRequireSelfieToEndEarly) ?? false;
+
     // v1: never require card to start.
     final requireStart = storedStart ?? false;
     if (storedStart == null) {
@@ -135,6 +150,7 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
       sessionStartedAt: session?.startedAt,
       pairedCardKeyHash: pairedHash,
       requireCardToEndEarly: requireEndEarly,
+      requireSelfieToEndEarly: requireSelfieEndEarly,
       requireCardToStart: requireStart,
     );
   }
@@ -172,6 +188,7 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
                   sessionStartedAt: null,
                   pairedCardKeyHash: null,
                   requireCardToEndEarly: false,
+                  requireSelfieToEndEarly: false,
                   requireCardToStart: false,
                 ))
             .copyWith(requireCardToEndEarly: false),
@@ -183,6 +200,44 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
     await engine.setCardRequired(required: enabled);
     if (current != null) {
       state = AsyncData(current.copyWith(requireCardToEndEarly: enabled));
+    } else {
+      ref.invalidateSelf();
+    }
+  }
+
+  Future<void> setRequireSelfieToEndEarly(
+    BuildContext context,
+    bool enabled,
+  ) async {
+    if (kIsWeb && enabled) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Selfie verification is not supported on web.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final prefs = ref.read(sharedPreferencesProvider);
+    final current = state.valueOrNull;
+    final sessionActive = current?.sessionActive == true;
+
+    if (sessionActive) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You can change this after the current session ends.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    await prefs.setBool(_kRequireSelfieToEndEarly, enabled);
+    if (current != null) {
+      state = AsyncData(current.copyWith(requireSelfieToEndEarly: enabled));
     } else {
       ref.invalidateSelf();
     }
@@ -256,11 +311,17 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
     required BuildContext context,
     required FocusSessionEndReason reason,
     required Future<bool> Function(BuildContext context) ensureCardValidated,
+    required Future<bool> Function(BuildContext context) ensureSelfieValidated,
   }) async {
     final current = state.valueOrNull;
     if (current?.requireCardToEndEarly == true &&
         reason == FocusSessionEndReason.userEarlyExit) {
       final ok = await ensureCardValidated(context);
+      if (!ok) return;
+    }
+    if (current?.requireSelfieToEndEarly == true &&
+        reason == FocusSessionEndReason.userEarlyExit) {
+      final ok = await ensureSelfieValidated(context);
       if (!ok) return;
     }
     await ref.read(activeFocusSessionProvider.notifier).endSession(reason: reason);

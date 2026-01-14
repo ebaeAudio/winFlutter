@@ -51,6 +51,7 @@ class AssistantExecutor {
     required void Function(DateTime nextDate) onSelectDate,
     required List<AssistantCommand> commands,
     required AssistantConfirm confirm,
+    bool alreadyPreviewed = false,
   }) async {
     final messages = <String>[];
     final errors = <String>[];
@@ -68,7 +69,7 @@ class AssistantExecutor {
       );
     }
 
-    if (hasDelete || actionCount > 1) {
+    if (!alreadyPreviewed && (hasDelete || actionCount > 1)) {
       final ok = await confirm(
         'Run assistant actions?',
         'This will run ${actionCount == 0 ? 1 : actionCount} action(s) for you.',

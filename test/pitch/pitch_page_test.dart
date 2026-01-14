@@ -92,10 +92,10 @@ void main() {
     await tester.pumpAndSettle();
 
     final first = pitchContent.faq.items.first;
-    final question = find.text(first.question);
+    final question = find.widgetWithText(ListTile, first.question).at(0);
     final answer = find.text(first.answer);
 
-    await tester.ensureVisible(question);
+    await tester.scrollUntilVisible(question, 200);
     expect(answer, findsNothing);
 
     await tester.tap(question);

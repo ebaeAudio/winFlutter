@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -88,6 +89,8 @@ class SettingsScreen extends ConsumerWidget {
     final hasPairedCard = gate?.hasPairedCard == true;
     final requireCardToEndEarly =
         hasPairedCard ? (gate?.requireCardToEndEarly == true) : false;
+    final requireSelfieToEndEarly =
+        !kIsWeb ? (gate?.requireSelfieToEndEarly == true) : false;
     final sessionActive = gate?.sessionActive == true;
 
     return AppScaffold(
@@ -194,6 +197,23 @@ class SettingsScreen extends ConsumerWidget {
                       : (v) => ref
                           .read(dumbPhoneSessionGateControllerProvider.notifier)
                           .setRequireCardToEndEarly(context, v),
+                ),
+                const Divider(height: 1),
+                SwitchListTile.adaptive(
+                  title: const Text('Require clown camera check to end early'),
+                  subtitle: Text(
+                    kIsWeb
+                        ? 'Not supported on web.'
+                        : sessionActive
+                            ? 'You can change this after the current session ends.'
+                            : 'When enabled, ending early opens your selfie camera with a clown overlay. No photo is taken.',
+                  ),
+                  value: requireSelfieToEndEarly,
+                  onChanged: (kIsWeb || sessionActive || dumbPhoneGate.isLoading)
+                      ? null
+                      : (v) => ref
+                          .read(dumbPhoneSessionGateControllerProvider.notifier)
+                          .setRequireSelfieToEndEarly(context, v),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -347,6 +367,25 @@ class SettingsScreen extends ConsumerWidget {
                             return;
                           }
                         },
+                ),
+              ],
+            ),
+          ),
+        ),
+        Gap.h16,
+        const SectionHeader(title: 'Sound'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.s8),
+            child: Column(
+              children: [
+                SwitchListTile.adaptive(
+                  title: const Text('Enable sounds'),
+                  subtitle: const Text(
+                    'Temporarily disabled while we stabilize playback.',
+                  ),
+                  value: userSettings.soundsEnabled,
+                  onChanged: null,
                 ),
               ],
             ),

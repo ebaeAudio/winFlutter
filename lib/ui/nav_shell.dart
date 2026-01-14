@@ -19,13 +19,16 @@ class NavShell extends ConsumerWidget {
     final hand = settings.oneHandModeHand;
 
     const destinations = [
-      CornerNavBubbleDestination(icon: Icons.today, label: 'Today'),
+      CornerNavBubbleDestination(
+        icon: Icons.workspaces_outline,
+        label: 'Projects',
+      ),
       CornerNavBubbleDestination(
         icon: Icons.check_circle_outline,
         label: 'Tasks',
       ),
+      CornerNavBubbleDestination(icon: Icons.today, label: 'Today'),
       CornerNavBubbleDestination(icon: Icons.lock, label: 'Focus'),
-      CornerNavBubbleDestination(icon: Icons.bar_chart, label: 'Rollups'),
       CornerNavBubbleDestination(icon: Icons.settings, label: 'Settings'),
     ];
 
@@ -69,16 +72,16 @@ class NavShell extends ConsumerWidget {
               height: navBarHeight,
               selectedIndex: navigationShell.currentIndex,
               destinations: const [
-                NavigationDestination(icon: Icon(Icons.today), label: 'Today'),
+                NavigationDestination(
+                  icon: Icon(Icons.workspaces_outline),
+                  label: 'Projects',
+                ),
                 NavigationDestination(
                   icon: Icon(Icons.check_circle_outline),
                   label: 'Tasks',
                 ),
+                NavigationDestination(icon: Icon(Icons.today), label: 'Today'),
                 NavigationDestination(icon: Icon(Icons.lock), label: 'Focus'),
-                NavigationDestination(
-                  icon: Icon(Icons.bar_chart),
-                  label: 'Rollups',
-                ),
                 NavigationDestination(
                   icon: Icon(Icons.settings),
                   label: 'Settings',

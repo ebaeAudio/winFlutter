@@ -8,6 +8,7 @@ import '../features/focus/ui/focus_entry_screen.dart';
 import '../features/focus/ui/focus_history_screen.dart';
 import '../features/focus/ui/focus_policies_screen.dart';
 import '../features/focus/ui/focus_policy_editor_screen.dart';
+import '../features/projects/projects_screen.dart';
 import '../features/rollups/rollups_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/settings/trackers/tracker_editor_screen.dart';
@@ -76,8 +77,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       if (isSignedIn && (goingToAuth || goingToSetup)) {
-        final safeNext =
-            _safeRelativeLocationFromNextParam(state.uri.queryParameters['next']);
+        final safeNext = _safeRelativeLocationFromNextParam(
+            state.uri.queryParameters['next']);
         return safeNext ?? '/today';
       }
 
@@ -120,6 +121,22 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
+                path: '/projects',
+                builder: (context, state) => const ProjectsScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/tasks',
+                builder: (context, state) => const AllTasksScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
                 path: '/today',
                 builder: (context, state) => const TodayScreen(),
                 routes: [
@@ -131,14 +148,6 @@ final routerProvider = Provider<GoRouter>((ref) {
                     ),
                   ),
                 ],
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/tasks',
-                builder: (context, state) => const AllTasksScreen(),
               ),
             ],
           ),
@@ -175,17 +184,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/rollups',
-                builder: (context, state) => const RollupsScreen(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
                 path: '/settings',
                 builder: (context, state) => const SettingsScreen(),
                 routes: [
+                  GoRoute(
+                    path: 'rollups',
+                    builder: (context, state) => const RollupsScreen(),
+                  ),
                   GoRoute(
                     path: 'trackers',
                     builder: (context, state) => const TrackersScreen(),
