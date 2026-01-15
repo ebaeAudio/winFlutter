@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../app/admin.dart';
 import '../../app/auth.dart';
 import '../../app/env.dart';
 import '../../app/errors.dart';
@@ -84,6 +85,7 @@ class SettingsScreen extends ConsumerWidget {
     final dumbPhoneGate = ref.watch(dumbPhoneSessionGateControllerProvider);
     final supabase = ref.watch(supabaseProvider);
     final client = supabase.client;
+    final isAdminAsync = ref.watch(isAdminProvider);
 
     final gate = dumbPhoneGate.valueOrNull;
     final hasPairedCard = gate?.hasPairedCard == true;
@@ -206,7 +208,7 @@ class SettingsScreen extends ConsumerWidget {
                         ? 'Not supported on web.'
                         : sessionActive
                             ? 'You can change this after the current session ends.'
-                            : 'When enabled, ending early opens your selfie camera with a clown overlay. No photo is taken.',
+                            : 'When enabled, ending early opens your selfie camera with a clown overlay. A photo is saved on your device.',
                   ),
                   value: requireSelfieToEndEarly,
                   onChanged: (kIsWeb || sessionActive || dumbPhoneGate.isLoading)
@@ -373,25 +375,6 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ),
         Gap.h16,
-        const SectionHeader(title: 'Sound'),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpace.s8),
-            child: Column(
-              children: [
-                SwitchListTile.adaptive(
-                  title: const Text('Enable sounds'),
-                  subtitle: const Text(
-                    'Temporarily disabled while we stabilize playback.',
-                  ),
-                  value: userSettings.soundsEnabled,
-                  onChanged: null,
-                ),
-              ],
-            ),
-          ),
-        ),
-        Gap.h16,
         const SectionHeader(title: 'Appearance'),
         Card(
           child: Padding(
@@ -550,6 +533,14 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
+                  leading: const Icon(Icons.nfc),
+                  title: const Text('NFC scan'),
+                  subtitle: const Text('Scan and inspect NDEF tags'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => context.go('/nfc-scan'),
+                ),
+                const Divider(height: 1),
+                ListTile(
                   leading: const Icon(Icons.feedback_outlined),
                   title: const Text('Send feedback'),
                   subtitle:
@@ -563,6 +554,26 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ),
         ),
+        if (isAdminAsync.valueOrNull == true) ...[
+          Gap.h16,
+          const SectionHeader(title: 'Admin'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpace.s8),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.admin_panel_settings),
+                    title: const Text('Admin Dashboard'),
+                    subtitle: const Text('View bug complaints and manage admin features'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.go('/settings/admin'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         if (env.demoMode) ...[
           Gap.h16,
           const SectionHeader(title: 'Demo'),

@@ -9,17 +9,22 @@ import '../features/focus/ui/focus_history_screen.dart';
 import '../features/focus/ui/focus_policies_screen.dart';
 import '../features/focus/ui/focus_policy_editor_screen.dart';
 import '../features/projects/projects_screen.dart';
+import '../features/projects/secret_notes_screen.dart';
 import '../features/rollups/rollups_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/settings/trackers/tracker_editor_screen.dart';
 import '../features/settings/trackers/trackers_screen.dart';
 import '../features/setup/setup_screen.dart';
+import '../features/admin/admin_dashboard_screen.dart';
 import '../features/feedback/feedback_screen.dart';
+import '../features/nfc/nfc_scan_screen.dart';
 import '../features/pitch/pitch_page.dart';
 import '../features/tasks/all_tasks_screen.dart';
 import '../features/today/today_screen.dart';
 import '../features/tasks/task_details_screen.dart';
+import '../ui/desktop_nav_shell.dart';
 import '../ui/nav_shell.dart';
+import '../ui/responsive.dart';
 import 'auth.dart';
 
 String? _safeRelativeLocationFromNextParam(String? nextParam) {
@@ -86,6 +91,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(
+        path: '/nfc-scan',
+        builder: (context, state) => const NfcScanScreen(),
+      ),
+      GoRoute(
         path: '/setup',
         builder: (context, state) => const SetupScreen(),
       ),
@@ -115,14 +124,23 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) =>
-            NavShell(navigationShell: navigationShell),
+        builder: (context, state, navigationShell) => isDesktopOS
+            ? DesktopNavShell(navigationShell: navigationShell)
+            : NavShell(navigationShell: navigationShell),
         branches: [
           StatefulShellBranch(
             routes: [
               GoRoute(
                 path: '/projects',
                 builder: (context, state) => const ProjectsScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'secret-notes',
+                    builder: (context, state) => SecretNotesScreen(
+                      noteId: state.uri.queryParameters['note'],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -138,7 +156,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: '/today',
-                builder: (context, state) => const TodayScreen(),
+                builder: (context, state) => TodayScreen(
+                  initialYmd: state.uri.queryParameters['ymd'],
+                ),
                 routes: [
                   GoRoute(
                     path: 'task/:id',
@@ -218,7 +238,19 @@ final routerProvider = Provider<GoRouter>((ref) {
                     path: 'pitch',
                     builder: (context, state) => const PitchPage(),
                   ),
+                  GoRoute(
+                    path: 'admin',
+                    builder: (context, state) => const AdminDashboardScreen(),
+                  ),
                 ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/admin',
+                builder: (context, state) => const AdminDashboardScreen(),
               ),
             ],
           ),
