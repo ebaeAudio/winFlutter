@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 
 import '../../ui/components/nfc_scan_sheet.dart';
 import 'nfc_card_service.dart';
+import 'nfc_scan_help.dart';
 import 'nfc_scan_purpose.dart';
 
 /// Injectable interface for NFC scan flows.
@@ -69,8 +71,24 @@ class NfcScanService implements NfcScanServiceBase {
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('NFC scan failed'),
-                      content: SelectableText(details),
+                      content: SingleChildScrollView(
+                        child: SelectableText(details),
+                      ),
                       actions: [
+                        TextButton(
+                          onPressed: () async {
+                            await Clipboard.setData(
+                              ClipboardData(text: details),
+                            );
+                            if (!ctx.mounted) return;
+                            Navigator.of(ctx).pop();
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Details copied.')),
+                            );
+                          },
+                          child: const Text('Copy'),
+                        ),
                         TextButton(
                           onPressed: () => Navigator.of(ctx).pop(),
                           child: const Text('Close'),
@@ -100,11 +118,17 @@ class NfcScanService implements NfcScanServiceBase {
 
     final available = await NfcManager.instance.isAvailable();
     if (!available) {
+      final isIos = defaultTargetPlatform == TargetPlatform.iOS;
       _showFailure(
         context,
-        summary: defaultTargetPlatform == TargetPlatform.iOS
-            ? 'NFC isn’t available. Make sure this is a compatible iPhone and this build includes the iOS “NFC Tag Reading” capability.'
-            : 'NFC is not available on this device.',
+        summary: isIos
+            ? 'NFC isn’t available. Use a compatible iPhone (not the simulator).'
+            : 'NFC isn’t available. Turn on NFC in system settings.',
+        details: [
+          nfcHowToScanChecklist(purpose),
+          '',
+          nfcTroubleshootingChecklist(purpose: purpose, platform: defaultTargetPlatform),
+        ].join('\n'),
       );
       return null;
     }
@@ -120,13 +144,37 @@ class NfcScanService implements NfcScanServiceBase {
           context,
           summary:
               'Couldn’t start NFC scan. This build may be missing the iOS “NFC Tag Reading” capability.',
-          details: outcome.message,
+          details: [
+            nfcHowToScanChecklist(purpose),
+            '',
+            nfcTroubleshootingChecklist(
+              purpose: purpose,
+              platform: defaultTargetPlatform,
+            ),
+            if (outcome.message != null && outcome.message!.trim().isNotEmpty) ...[
+              '',
+              'Debug:',
+              outcome.message!,
+            ],
+          ].join('\n'),
         );
       } else if (outcome.reason == _NfcScanNullReason.sessionError) {
         _showFailure(
           context,
           summary: 'NFC scan failed. Try again.',
-          details: outcome.message,
+          details: [
+            nfcHowToScanChecklist(purpose),
+            '',
+            nfcTroubleshootingChecklist(
+              purpose: purpose,
+              platform: defaultTargetPlatform,
+            ),
+            if (outcome.message != null && outcome.message!.trim().isNotEmpty) ...[
+              '',
+              'Debug:',
+              outcome.message!,
+            ],
+          ].join('\n'),
         );
       }
       return null;
@@ -154,15 +202,18 @@ class NfcScanService implements NfcScanServiceBase {
         alertMessage: nfcStartAlertMessage(purpose),
         invalidateAfterFirstRead: true,
         onDiscovered: (tag) async {
-          final hash = await cardSvc.tryReadPairedKeyHashFromTag(tag);
-          if (hash == null || hash.isEmpty) {
+          final attempt = await cardSvc.readKeyHashWithDiagnostics(tag);
+          if (attempt.keyHash == null || attempt.keyHash!.isEmpty) {
             // Show an error in the native NFC popup.
             await NfcManager.instance.stopSession(
               errorMessage:
                   'Couldn’t read this tag. Try a different NFC card/tag.',
             );
             await completeOnce(
-              const _NfcScanOutcome.none(_NfcScanNullReason.sessionError),
+              _NfcScanOutcome.none(
+                _NfcScanNullReason.sessionError,
+                message: attempt.diagnostics,
+              ),
             );
             return;
           }
@@ -170,7 +221,7 @@ class NfcScanService implements NfcScanServiceBase {
           await NfcManager.instance.stopSession(
             alertMessage: nfcSuccessAlertMessage(purpose),
           );
-          await completeOnce(_NfcScanOutcome.success(hash));
+          await completeOnce(_NfcScanOutcome.success(attempt.keyHash!));
         },
         onError: (error) async {
           // userCanceled is a normal exit path; do not show extra UI.
@@ -185,9 +236,10 @@ class NfcScanService implements NfcScanServiceBase {
               _NfcScanOutcome.none(
                 _NfcScanNullReason.sessionError,
                 // Don't leak overly-technical copy into UX unless we have to.
-                message: (error.message.isNotEmpty)
-                    ? error.message
-                    : 'NFC scan failed. Try again.',
+                message: [
+                  'NfcErrorType: ${error.type}',
+                  if (error.message.isNotEmpty) 'Message: ${error.message}',
+                ].join('\n'),
               ),
             );
             return;

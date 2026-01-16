@@ -1,8 +1,6 @@
 PODS:
   - app_links (0.0.2):
     - Flutter
-  - audioplayers_darwin (0.0.1):
-    - Flutter
   - camera_avfoundation (0.0.1):
     - Flutter
   - CwlCatchException (2.2.1):
@@ -32,7 +30,6 @@ PODS:
 
 DEPENDENCIES:
   - app_links (from `.symlinks/plugins/app_links/ios`)
-  - audioplayers_darwin (from `.symlinks/plugins/audioplayers_darwin/ios`)
   - camera_avfoundation (from `.symlinks/plugins/camera_avfoundation/ios`)
   - Flutter (from `Flutter`)
   - flutter_local_notifications (from `.symlinks/plugins/flutter_local_notifications/ios`)
@@ -52,8 +49,6 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   app_links:
     :path: ".symlinks/plugins/app_links/ios"
-  audioplayers_darwin:
-    :path: ".symlinks/plugins/audioplayers_darwin/ios"
   camera_avfoundation:
     :path: ".symlinks/plugins/camera_avfoundation/ios"
   Flutter:
@@ -77,7 +72,6 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   app_links: f3e17e4ee5e357b39d8b95290a9b2c299fca71c6
-  audioplayers_darwin: 877d9a4d06331c5c374595e46e16453ac7eafa40
   camera_avfoundation: adb0207d868b2d873e895371d88448399ab78d87
   CwlCatchException: 7acc161b299a6de7f0a46a6ed741eae2c8b4d75a
   CwlCatchExceptionSupport: 54ccab8d8c78907b57f99717fb19d4cc3bce02dc
@@ -91,6 +85,6 @@ SPEC CHECKSUMS:
   speech_to_text: 87bf9298952e8d9073be1b6aade6d5758db5170c
   url_launcher_ios: 5334b05cef931de560670eeae103fd3e431ac3fe
 
-PODFILE CHECKSUM: 3cd1b7cbc8871f5b1f151d1f4fb0e07e32b11f3e
+PODFILE CHECKSUM: 3608f08ee955794a01a42c0059663fc255a31f07
 
 COCOAPODS: 1.16.2

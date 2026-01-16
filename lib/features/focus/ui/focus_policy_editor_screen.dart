@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../domain/focus/app_identifier.dart';
 import '../../../domain/focus/focus_friction.dart';
 import '../../../domain/focus/focus_policy.dart';
 import '../../../ui/app_scaffold.dart';
@@ -156,11 +155,6 @@ class _FocusPolicyEditorScreenState
                   return null;
                 },
               ),
-              const SizedBox(height: 12),
-              _AllowedAppsEditor(
-                policy: policy,
-                onChanged: (p) => setState(() => _policy = p),
-              ),
               if (isIOS) ...[
                 const SizedBox(height: 12),
                 Card(
@@ -175,8 +169,7 @@ class _FocusPolicyEditorScreenState
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'On iOS, app blocking requires Apple’s Screen Time picker to select apps to block. '
-                          'The “Allowed apps” list above is primarily used for Android.',
+                          'On iOS, app blocking requires Apple\'s Screen Time picker to select apps to block.',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                         const SizedBox(height: 10),
@@ -221,7 +214,7 @@ class _FocusPolicyEditorScreenState
                   padding: const EdgeInsets.all(12),
                   child: Text(
                     isIOS
-                        ? 'iOS note: allowlisting is limited by Screen Time APIs. We may need to model a “blocked apps” selection in the iOS engine.'
+                        ? 'iOS note: allowlisting is limited by Screen Time APIs. We may need to model a "blocked apps" selection in the iOS engine.'
                         : 'Android note: enforcement uses an AccessibilityService and cannot be 100% foolproof on all OEMs.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
@@ -232,125 +225,6 @@ class _FocusPolicyEditorScreenState
         ),
       ],
     );
-  }
-}
-
-class _AllowedAppsEditor extends StatelessWidget {
-  const _AllowedAppsEditor({required this.policy, required this.onChanged});
-
-  final FocusPolicy policy;
-  final ValueChanged<FocusPolicy> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final isIOS = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Allowed apps',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final a in policy.allowedApps)
-                  InputChip(
-                    label: Text(a.displayName ?? a.id),
-                    onDeleted: () {
-                      onChanged(
-                        policy.copyWith(
-                          allowedApps: policy.allowedApps
-                              .where((x) =>
-                                  x.id != a.id || x.platform != a.platform)
-                              .toList(growable: false),
-                        ),
-                      );
-                    },
-                  ),
-                ActionChip(
-                  label: const Text('Add app id…'),
-                  avatar: const Icon(Icons.add),
-                  onPressed: () async {
-                    final added = await _promptAddApp(context);
-                    if (added == null) return;
-                    onChanged(
-                      policy.copyWith(
-                        allowedApps: [...policy.allowedApps, added],
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              isIOS
-                  ? 'Enter an iOS bundle id (e.g. com.apple.Maps).'
-                  : 'Enter an Android package name (e.g. com.google.android.youtube).',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static Future<AppIdentifier?> _promptAddApp(BuildContext context) async {
-    final id = TextEditingController();
-    final name = TextEditingController();
-    final platform = (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS)
-        ? AppPlatform.ios
-        : AppPlatform.android;
-    try {
-      final ok = await showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Add allowed app'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: id,
-                    decoration: const InputDecoration(labelText: 'App id'),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: name,
-                    decoration: const InputDecoration(
-                        labelText: 'Display name (optional)'),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Add'),
-                ),
-              ],
-            ),
-          ) ??
-          false;
-      if (!ok) return null;
-      final raw = id.text.trim();
-      if (raw.isEmpty) return null;
-      final dn = name.text.trim();
-      return AppIdentifier(
-        platform: platform,
-        id: raw,
-        displayName: dn.isEmpty ? null : dn,
-      );
-    } finally {
-      id.dispose();
-      name.dispose();
-    }
   }
 }
 

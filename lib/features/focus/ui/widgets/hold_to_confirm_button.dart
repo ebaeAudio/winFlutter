@@ -87,10 +87,14 @@ class _HoldToConfirmButtonState extends State<HoldToConfirmButton> {
 
     final label = Text(_busy ? (widget.busyLabel ?? widget.label) : widget.label);
 
-    return GestureDetector(
-      onTapDown: (_) => _start(),
-      onTapUp: (_) => _cancel(),
-      onTapCancel: _cancel,
+    // Use Listener instead of GestureDetector with tap callbacks.
+    // Tap gestures have a ~500ms timeout after which onTapCancel fires,
+    // which breaks hold-to-confirm for durations longer than that.
+    // Pointer events don't have this timeout issue.
+    return Listener(
+      onPointerDown: (_) => _start(),
+      onPointerUp: (_) => _cancel(),
+      onPointerCancel: (_) => _cancel(),
       child: Stack(
         alignment: Alignment.center,
         children: [

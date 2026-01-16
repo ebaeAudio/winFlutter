@@ -10,6 +10,20 @@ final nfcCardServiceProvider = Provider<NfcCardService>((ref) {
   return const NfcCardService();
 });
 
+class NfcReadAttempt {
+  const NfcReadAttempt({
+    required this.keyHash,
+    required this.diagnostics,
+  });
+
+  final String? keyHash;
+
+  /// Human-readable debug info, safe to copy/paste.
+  ///
+  /// Important: this should avoid including raw tag contents/UID bytes.
+  final String diagnostics;
+}
+
 class NfcCardService {
   const NfcCardService();
 
@@ -24,23 +38,97 @@ class NfcCardService {
   ///   but third-party apps frequently encounter tags without NDEF content.
   /// - For Dumb Phone Mode pairing, a stable per-tag hash is sufficient.
   Future<String?> tryReadPairedKeyHashFromTag(NfcTag tag) async {
-    final ndef = Ndef.from(tag);
-    if (ndef != null) {
-      NdefMessage? msg = ndef.cachedMessage;
-      msg ??= await ndef.read();
+    final attempt = await readKeyHashWithDiagnostics(tag);
+    return attempt.keyHash;
+  }
 
-      final key = extractKeyStringFromMessage(msg);
-      if (key != null) {
-        final normalized = normalizeKey(key);
-        if (normalized != null) {
-          return sha256HexOfUtf8(normalized);
+  Future<NfcReadAttempt> readKeyHashWithDiagnostics(NfcTag tag) async {
+    final lines = <String>[];
+    final keys = tag.data.keys.whereType<String>().toList(growable: false);
+    keys.sort();
+    lines.add('Tag tech keys: ${keys.isEmpty ? '(none)' : keys.join(', ')}');
+
+    final ndef = Ndef.from(tag);
+    lines.add('NDEF: ${ndef == null ? 'not present' : 'present'}');
+
+    if (ndef != null) {
+      try {
+        NdefMessage? msg = ndef.cachedMessage;
+        msg ??= await ndef.read();
+
+        final recordCount = msg.records.length;
+        lines.add('NDEF records: $recordCount');
+        if (recordCount > 0) {
+          final types =
+              msg.records.map((r) => _recordTypeLabel(r.type)).toList();
+          lines.add('NDEF types: ${types.join(', ')}');
         }
+
+        final key = extractKeyStringFromMessage(msg);
+        if (key == null) {
+          lines.add('Extracted key: (none)');
+        } else {
+          final len = utf8.encode(key.trim()).length;
+          lines.add('Extracted key bytes: $len');
+          final normalized = normalizeKey(key);
+          if (normalized == null) {
+            lines.add('Normalize: rejected (too short / low entropy)');
+          } else {
+            lines.add('Normalize: accepted');
+            final hash = sha256HexOfUtf8(normalized);
+            lines.add('Hash source: NDEF-derived string');
+            return NfcReadAttempt(
+              keyHash: hash,
+              diagnostics: lines.join('\n'),
+            );
+          }
+        }
+      } catch (e) {
+        lines.add('NDEF read error: $e');
       }
     }
 
-    final idBytes = tryExtractIdentifierBytes(tag);
-    if (idBytes == null || idBytes.isEmpty) return null;
-    return sha256HexOfBytes(idBytes);
+    String? idSource;
+    Uint8List? idBytes;
+
+    // Try tech-key specific identifier (so diagnostics can show where it came from).
+    const techKeys = <String>[
+      'mifare',
+      'iso7816',
+      'iso15693',
+      'nfca',
+      'nfcb',
+      'nfcf',
+      'nfcv',
+      'isodep',
+      'mifareclassic',
+      'mifareultralight',
+      'ndef',
+    ];
+    for (final k in techKeys) {
+      final v = tag.data[k];
+      final bytes = _identifierBytesFromTechMap(v);
+      if (bytes != null && bytes.isNotEmpty) {
+        idBytes = bytes;
+        idSource = k;
+        break;
+      }
+    }
+
+    // Fallback: top-level identifier.
+    idBytes ??= _identifierBytesFromTechMap(tag.data);
+    idSource ??=
+        (idBytes != null && idBytes.isNotEmpty) ? 'top-level' : null;
+
+    if (idBytes == null || idBytes.isEmpty) {
+      lines.add('Identifier bytes: (none)');
+      return NfcReadAttempt(keyHash: null, diagnostics: lines.join('\n'));
+    }
+
+    lines.add('Identifier bytes: ${idBytes.length} (source: $idSource)');
+    final hash = sha256HexOfBytes(idBytes);
+    lines.add('Hash source: tag identifier bytes');
+    return NfcReadAttempt(keyHash: hash, diagnostics: lines.join('\n'));
   }
 
   String? extractKeyStringFromMessage(NdefMessage msg) {
@@ -152,6 +240,19 @@ class NfcCardService {
       }
     }
     return null;
+  }
+
+  static String _recordTypeLabel(Uint8List type) {
+    if (type.length == 1 && type[0] == 0x54 /* 'T' */) return 'Text (T)';
+    if (type.length == 1 && type[0] == 0x55 /* 'U' */) return 'URI (U)';
+    if (type.isEmpty) return 'Unknown';
+    // Best-effort: printable ASCII.
+    try {
+      final s = ascii.decode(type);
+      final ok = s.runes.every((c) => c >= 32 && c <= 126);
+      if (ok) return 'Other("$s")';
+    } catch (_) {}
+    return 'Other(${type.length} bytes)';
   }
 
   String? _decodeWellKnownText(Uint8List payload) {

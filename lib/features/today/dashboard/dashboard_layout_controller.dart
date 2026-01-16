@@ -56,6 +56,7 @@ class DashboardLayoutController extends StateNotifier<List<DashboardSectionId>> 
     for (final raw in stored) {
       final id = DashboardSectionId.tryParse(raw);
       if (id == null) continue;
+      if (id == DashboardSectionId.niceToDo) continue;
       if (seen.contains(id)) continue;
       seen.add(id);
       ids.add(id);

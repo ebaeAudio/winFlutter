@@ -35,7 +35,6 @@ enum DashboardSectionId {
     DashboardSectionId.habits,
     DashboardSectionId.trackers,
     DashboardSectionId.mustWins,
-    DashboardSectionId.niceToDo,
     DashboardSectionId.reflection,
   ];
 }

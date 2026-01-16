@@ -7,6 +7,7 @@ import '../features/today/today_controller.dart';
 import '../features/today/today_models.dart';
 import '../platform/dock_badge/dock_badge_controller.dart';
 import '../platform/shortcuts/app_shortcuts.dart';
+import 'components/active_timers_display.dart';
 import 'components/command_palette.dart';
 import 'components/quick_capture.dart';
 import 'spacing.dart';
@@ -306,7 +307,14 @@ class _DesktopNavShellState extends ConsumerState<DesktopNavShell> {
                           ),
                         ),
 
-                        Gap.h16,
+                        Gap.h12,
+
+                        // ─────────────────────────────────────────────────────
+                        // Active Timers Display
+                        // ─────────────────────────────────────────────────────
+                        ActiveTimersDisplay(isExpanded: _isExpanded),
+
+                        Gap.h12,
 
                         // ─────────────────────────────────────────────────────
                         // Navigation Items

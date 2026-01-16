@@ -41,12 +41,78 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
 
+    # Keep pod deployment targets aligned with the app.
+    # Some pods ship with very old IPHONEOS_DEPLOYMENT_TARGET values (e.g. 9.0),
+    # which newer Xcodes warn about / can break builds.
+    minimum_ios_version = '13.0'
+    token_re = /(?:^|\s)-G(?:\s|$)/
+
     # Ensure Release/Profile builds generate dSYM files (improves App Store Connect symbol uploads).
     target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = minimum_ios_version
+
+      # Some toolchains/pod specs can accidentally inject '-G' into clang flags.
+      # '-G' is not supported for arm64-apple-ios targets, so proactively strip it.
+      # Note: we scrub ALL build settings (including conditional keys like
+      # OTHER_CFLAGS[sdk=iphoneos*]) and log when we modify anything so the next
+      # `pod install` can tell us *which* target injected it.
+      config.build_settings.keys.each do |key|
+        value = config.build_settings[key]
+        next if value.nil?
+
+        if value.is_a?(String)
+          next unless value.match?(token_re)
+          cleaned = value.gsub(token_re, ' ').strip.gsub(/\s+/, ' ')
+          config.build_settings[key] = cleaned
+          puts "[Podfile] Stripped -G from #{target.name} (#{config.name}) #{key}"
+        elsif value.is_a?(Array)
+          next unless value.include?('-G')
+          config.build_settings[key] = value.reject { |v| v == '-G' }
+          puts "[Podfile] Stripped -G from #{target.name} (#{config.name}) #{key}"
+        end
+      end
+
       # Only force this for non-Debug configs to avoid slowing Debug builds.
       if config.name != 'Debug'
         config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf-with-dsym'
       end
+    end
+
+    # Some pods can also inject bad flags via per-file COMPILER_FLAGS (PBXBuildFile),
+    # which do NOT show up in target build settings.
+    #
+    # Note: CocoaPods includes non-source targets (e.g. PBXAggregateTarget) in
+    # `pods_project.targets`, so guard for targets without a source build phase.
+    begin
+      next unless target.respond_to?(:source_build_phase)
+      source_phase = target.source_build_phase
+      next if source_phase.nil?
+
+      bad_file_flag_re = /(?:^|\s)-GCC_WARN_INHIBIT_ALL_WARNINGS(?:\s|$)/
+      source_phase.files.each do |build_file|
+        next if build_file.settings.nil?
+        next unless build_file.settings.key?('COMPILER_FLAGS')
+
+        flags = build_file.settings['COMPILER_FLAGS']
+        next unless flags.is_a?(String)
+        next unless flags.match?(bad_file_flag_re) || flags.match?(token_re)
+
+        cleaned = flags
+                  .gsub(bad_file_flag_re, ' ')
+                  .gsub(token_re, ' ')
+                  .strip
+                  .gsub(/\s+/, ' ')
+
+        if cleaned.empty?
+          build_file.settings.delete('COMPILER_FLAGS')
+        else
+          build_file.settings['COMPILER_FLAGS'] = cleaned
+        end
+
+        puts "[Podfile] Stripped bad COMPILER_FLAGS from #{target.name}: #{flags} -> #{cleaned}"
+      end
+    rescue StandardError => e
+      puts "[Podfile] Warning: could not scrub per-file COMPILER_FLAGS for #{target.name}: #{e}"
     end
 
     # Xcode's clang dependency scanner can fail to build the CwlCatchExceptionSupport

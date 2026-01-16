@@ -32,8 +32,8 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
   bool _submitting = false;
   bool _submitted = false;
 
-  static const int _descriptionSoftLimit = 280;
-  static const int _detailsSoftLimit = 2000;
+  static const int _descriptionMaxChars = 280;
+  static const int _detailsMaxChars = 2000;
 
   @override
   void dispose() {
@@ -46,10 +46,22 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
     final raw = (value ?? '').trim();
     if (raw.isEmpty) return 'Add a short description.';
     if (raw.length < 10) return 'Add a bit more detail (at least 10 characters).';
+    if (raw.length > _descriptionMaxChars) {
+      return 'Keep it under $_descriptionMaxChars characters.';
+    }
 
     final words = raw.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
     if (words.length < 2) return 'Use a couple of words so we can triage it.';
 
+    return null;
+  }
+
+  String? _validateDetails(String? value) {
+    final raw = (value ?? '').trim();
+    if (raw.isEmpty) return null;
+    if (raw.length > _detailsMaxChars) {
+      return 'Keep it under $_detailsMaxChars characters.';
+    }
     return null;
   }
 
@@ -224,8 +236,8 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
                           validator: _validateDescription,
                           minLines: 2,
                           maxLines: 4,
-                          maxLength: _descriptionSoftLimit,
-                          maxLengthEnforcement: MaxLengthEnforcement.none,
+                          maxLength: _descriptionMaxChars,
+                          maxLengthEnforcement: MaxLengthEnforcement.enforced,
                           decoration: const InputDecoration(
                             hintText: 'Example: Tasks sometimes duplicate when I tap Save.',
                           ),
@@ -236,10 +248,11 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
                         TextFormField(
                           controller: _detailsController,
                           enabled: canSubmit,
+                          validator: _validateDetails,
                           minLines: 3,
                           maxLines: 8,
-                          maxLength: _detailsSoftLimit,
-                          maxLengthEnforcement: MaxLengthEnforcement.none,
+                          maxLength: _detailsMaxChars,
+                          maxLengthEnforcement: MaxLengthEnforcement.enforced,
                           decoration: const InputDecoration(
                             hintText:
                                 'Steps to reproduce, what you were doing, or any extra context.',

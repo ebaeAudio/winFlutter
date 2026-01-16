@@ -62,6 +62,13 @@ Optional (demo mode):
 flutter run --dart-define=DEMO_MODE=true
 ```
 
+### How to test with NTAG215
+
+- Use a phone app like **NFC Tools** to format your NTAG215 as **NDEF** and write a simple Text or URI record.
+- Run the app on a **physical** CoreNFC-capable iPhone (not the simulator) or an Android device with NFC enabled.
+- In Xcode, enable the **NFC Tag Reading** capability for the iOS target if it isn't already set.
+- Open the NFC scan screen and tap **Start Scan**, then hold the tag near the top of your phone to read the contents.
+
 ### Run on macOS from Cursor (Run/Debug button)
 
 This repo includes Cursor/VS Code launch configs in `.vscode/launch.json`.

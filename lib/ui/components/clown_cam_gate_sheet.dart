@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../spacing.dart';
 
@@ -77,6 +80,73 @@ class _ClownCamGateSheetState extends State<ClownCamGateSheet> {
     }
   }
 
+  Future<void> _captureAndSave(BuildContext context) async {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized || _busy) return;
+
+    setState(() {
+      _busy = true;
+      _initError = null;
+    });
+
+    try {
+      final shot = await c.takePicture();
+      final bytes = await shot.readAsBytes();
+      final pngBytes = await _renderOverlayedPng(context, bytes);
+      await _saveClownPhoto(pngBytes);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saved clown cam photo on this device.')),
+      );
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save clown cam photo: $e')),
+      );
+    } finally {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+      });
+    }
+  }
+
+  Future<Uint8List> _renderOverlayedPng(
+    BuildContext context,
+    Uint8List bytes,
+  ) async {
+    final base = await _decodeImage(bytes);
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final size = Size(base.width.toDouble(), base.height.toDouble());
+
+    canvas.drawImage(base, Offset.zero, Paint());
+    _ClownOverlayPainter(Theme.of(context)).paint(canvas, size);
+
+    final picture = recorder.endRecording();
+    final out = await picture.toImage(base.width, base.height);
+    final data = await out.toByteData(format: ui.ImageByteFormat.png);
+    if (data == null) {
+      throw StateError('Failed to encode clown cam image.');
+    }
+    return data.buffer.asUint8List();
+  }
+
+  Future<ui.Image> _decodeImage(Uint8List bytes) {
+    final completer = Completer<ui.Image>();
+    ui.decodeImageFromList(bytes, completer.complete);
+    return completer.future;
+  }
+
+  Future<File> _saveClownPhoto(Uint8List bytes) async {
+    final dir = await getApplicationDocumentsDirectory();
+    final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+    final file = File('${dir.path}/clown_cam_$stamp.png');
+    return file.writeAsBytes(bytes, flush: true);
+  }
+
   @override
   void dispose() {
     final c = _controller;
@@ -116,7 +186,7 @@ class _ClownCamGateSheetState extends State<ClownCamGateSheet> {
             ),
             Gap.h12,
             Text(
-              'Look into the camera for 2 seconds. No photo is taken or saved.',
+              'Look into the camera for 2 seconds. We will save a photo with the overlay.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -139,8 +209,8 @@ class _ClownCamGateSheetState extends State<ClownCamGateSheet> {
                 ),
                 Expanded(
                   child: FilledButton(
-                    onPressed: _ready ? () => Navigator.of(context).pop(true) : null,
-                    child: const Text('End early'),
+                    onPressed: _ready ? () => _captureAndSave(context) : null,
+                    child: const Text('Save & end early'),
                   ),
                 ),
               ],

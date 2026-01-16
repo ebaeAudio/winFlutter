@@ -1,10 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../domain/focus/pomodoro_timer.dart';
-import '../../../../platform/sound/sound_service.dart';
 import '../../../../ui/spacing.dart';
 import '../../focus_ticker_provider.dart';
 import '../../pomodoro_timer_controller.dart';
@@ -45,7 +42,6 @@ class _PomodoroTimerCardState extends ConsumerState<PomodoroTimerCard> {
         timer.startedAtMs != null &&
         _didScheduleReconcileForStartedAtMs != timer.startedAtMs) {
       _didScheduleReconcileForStartedAtMs = timer.startedAtMs;
-      unawaited(ref.read(soundServiceProvider).play(AppSfx.pomodoroFlip));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         controller.reconcileExpiredNow();
       });

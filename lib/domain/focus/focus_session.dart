@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'focus_friction.dart';
+
 enum FocusSessionStatus {
   active,
   ended;
@@ -19,6 +21,7 @@ class FocusSession {
     required this.startedAt,
     required this.plannedEndAt,
     required this.status,
+    this.friction,
     this.endedAt,
     this.endReason,
     required this.emergencyUnlocksUsed,
@@ -31,6 +34,12 @@ class FocusSession {
   final DateTime plannedEndAt;
 
   final FocusSessionStatus status;
+
+  /// Snapshot of the effective friction used when the session started.
+  ///
+  /// Back-compat: older persisted sessions may omit this; callers should fall
+  /// back to the policy’s current friction.
+  final FocusFrictionSettings? friction;
   final DateTime? endedAt;
   final FocusSessionEndReason? endReason;
 
@@ -44,6 +53,7 @@ class FocusSession {
         'startedAt': startedAt.toIso8601String(),
         'plannedEndAt': plannedEndAt.toIso8601String(),
         'status': status.name,
+        if (friction != null) 'friction': friction!.toJson(),
         if (endedAt != null) 'endedAt': endedAt!.toIso8601String(),
         if (endReason != null) 'endReason': endReason!.name,
         'emergencyUnlocksUsed': emergencyUnlocksUsed,
@@ -58,6 +68,7 @@ class FocusSession {
           (s) => s.name == (json['status'] as String?),
           orElse: () => FocusSessionStatus.ended,
         ),
+        friction: _friction(json['friction']),
         endedAt: _dt(json['endedAt'] as String?),
         endReason: FocusSessionEndReason.values
             .cast<FocusSessionEndReason?>()
@@ -71,6 +82,16 @@ class FocusSession {
 
   static DateTime? _dt(String? raw) =>
       raw == null ? null : DateTime.tryParse(raw);
+
+  static FocusFrictionSettings? _friction(Object? raw) {
+    if (raw is Map<String, Object?>) {
+      return FocusFrictionSettings.fromJson(raw);
+    }
+    if (raw is Map) {
+      return FocusFrictionSettings.fromJson(raw.cast<String, Object?>());
+    }
+    return null;
+  }
 
   static List<FocusSession> listFromJsonString(String raw) {
     final decoded = jsonDecode(raw);

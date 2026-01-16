@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -22,13 +23,15 @@ import '../../ui/components/conversation_border.dart';
 import '../../ui/components/section_header.dart';
 import '../../ui/components/task_details_sheet.dart';
 import '../../ui/spacing.dart';
-import '../../platform/sound/sound_service.dart';
+import '../focus/focus_session_controller.dart';
+import '../focus/focus_ticker_provider.dart';
 import '../tasks/task_details_screen.dart';
 import 'dashboard/dashboard_layout_controller.dart';
 import 'dashboard/dashboard_section_id.dart';
 import 'today_controller.dart';
 import 'today_models.dart';
 import 'today_trackers_controller.dart';
+import 'today_timebox_controller.dart';
 import 'widgets/starter_step_editor_sheet.dart';
 
 enum _TodayOverflowAction {
@@ -37,7 +40,15 @@ enum _TodayOverflowAction {
 }
 
 class TodayScreen extends ConsumerStatefulWidget {
-  const TodayScreen({super.key});
+  const TodayScreen({
+    super.key,
+    this.initialYmd,
+  });
+
+  /// Optional deep-link override (e.g., Focus wants to open the session’s start-day).
+  ///
+  /// Format: yyyy-MM-dd
+  final String? initialYmd;
 
   @override
   ConsumerState<TodayScreen> createState() => _TodayScreenState();
@@ -47,9 +58,13 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   DateTime _date = _dateOnly(DateTime.now());
   String? _loadedReflectionForYmd;
   final Set<String> _expandedTaskIds = {};
+  String? _rolloverCheckForYmd;
+  Future<List<TodayTask>>? _rolloverYesterdayIncompleteFuture;
+  bool _rolloverInFlight = false;
   final _quickAddController = TextEditingController();
   final _quickAddFocus = FocusNode();
   var _quickAddType = TodayTaskType.mustWin;
+  bool _quickAddInFlight = false;
   final _reflectionController = TextEditingController();
   final _reflectionFocus = FocusNode();
   final _habitAddController = TextEditingController();
@@ -59,26 +74,28 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   String? _assistantSay;
   bool _isCustomizingDashboard = false;
 
-  final _assistantRingKey = GlobalKey();
   final SpeechToText _speech = SpeechToText();
   bool _speechReady = false;
   bool _assistantListening = false;
   String? _assistantSpeechError;
-  bool _assistantHoldArmed = false;
   int _assistantListenSession = 0;
   double _assistantSoundLevel01 = 0.0;
+  Future<void> Function()? _assistantFinishListeningAndRun;
 
   static DateTime _dateOnly(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
   static bool _isSameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
-  void _play(AppSfx sfx) {
-    unawaited(ref.read(soundServiceProvider).play(sfx));
-  }
-
   @override
   void initState() {
     super.initState();
+    final raw = widget.initialYmd;
+    if (raw != null && raw.trim().isNotEmpty) {
+      final parsed = DateTime.tryParse(raw.trim());
+      if (parsed != null) {
+        _date = _dateOnly(parsed);
+      }
+    }
     _reflectionFocus.addListener(() {
       if (_reflectionFocus.hasFocus) return;
       final ymd = DateFormat('yyyy-MM-dd').format(_date);
@@ -120,6 +137,19 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           if (!mounted) return;
           setState(() => _assistantSpeechError = e.errorMsg);
         },
+        onStatus: (status) {
+          // speech_to_text v7 reports listen lifecycle statuses here.
+          // For the auto-run interaction, treat "done"/"notListening" as the end
+          // of speech and finish the session.
+          if (!mounted) return;
+          final finish = _assistantFinishListeningAndRun;
+          if (finish == null) return;
+          if (!_assistantListening) return;
+          if (status == SpeechToText.doneStatus ||
+              status == SpeechToText.notListeningStatus) {
+            unawaited(finish());
+          }
+        },
       );
       final hasPerm = await _speech.hasPermission;
       if (!mounted) return false;
@@ -158,70 +188,108 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   }
 
   Future<void> _startAssistantListening() async {
-    if (_assistantLoading) return;
-    if (_assistantListening) return;
+    try {
+      if (_assistantLoading) return;
+      if (_assistantListening) return;
 
-    final ok = await _ensureSpeechReady();
-    if (!ok) {
-      if (!mounted) return;
-      _play(AppSfx.error);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_assistantSpeechError ?? 'Speech unavailable')),
-      );
-      return;
-    }
+      final ok = await _ensureSpeechReady();
+      if (!ok) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_assistantSpeechError ?? 'Speech unavailable')),
+        );
+        return;
+      }
 
-    final hasPerm = await _speech.hasPermission;
-    if (hasPerm == false) {
+      final hasPerm = await _speech.hasPermission;
+      if (hasPerm == false) {
+        if (!mounted) return;
+        setState(() {
+          _assistantSpeechError =
+              'Microphone / Speech permission denied. Enable it in Settings and try again.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_assistantSpeechError!)),
+        );
+        return;
+      }
+
+      // Safely handle haptic feedback (may not be supported on all platforms)
+      try {
+        HapticFeedback.selectionClick();
+      } catch (_) {
+        // Ignore haptic feedback errors
+      }
+
       if (!mounted) return;
       setState(() {
-        _assistantSpeechError =
-            'Microphone / Speech permission denied. Enable it in Settings and try again.';
+        _assistantListening = true;
+        _assistantSpeechError = null;
+        _assistantSoundLevel01 = 0.0;
       });
-      _play(AppSfx.error);
+
+      try {
+        await _speech.listen(
+          onSoundLevelChange: (level) {
+            if (!mounted) return;
+            // speech_to_text typically reports ~[-2..10]. Normalize defensively.
+            final next = ((level + 2) / 12).clamp(0.0, 1.0);
+            // Light smoothing to avoid jitter.
+            final smooth = _assistantSoundLevel01 * 0.65 + next * 0.35;
+            setState(() => _assistantSoundLevel01 = smooth);
+          },
+          listenOptions: SpeechListenOptions(
+            listenMode: ListenMode.confirmation,
+            partialResults: true,
+          ),
+          onResult: (result) {
+            final words = result.recognizedWords.trim();
+            if (words.isEmpty) return;
+            _setAssistantTranscript(words);
+          },
+        );
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _assistantListening = false;
+          _assistantSoundLevel01 = 0.0;
+          _assistantSpeechError = 'Speech recognition error. Please try again.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_assistantSpeechError!)),
+        );
+      }
+    } catch (e, stackTrace) {
+      // Catch any unhandled exceptions to prevent crashes
+      if (!mounted) return;
+      setState(() {
+        _assistantListening = false;
+        _assistantSoundLevel01 = 0.0;
+        _assistantSpeechError = 'Speech recognition unavailable. Please try again.';
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_assistantSpeechError!)),
       );
-      return;
+      debugPrint('Speech listening error: $e');
+      debugPrint('Stack trace: $stackTrace');
     }
-
-    HapticFeedback.selectionClick();
-    setState(() {
-      _assistantListening = true;
-      _assistantSpeechError = null;
-      _assistantSoundLevel01 = 0.0;
-    });
-
-    await _speech.listen(
-      onSoundLevelChange: (level) {
-        if (!mounted) return;
-        // speech_to_text typically reports ~[-2..10]. Normalize defensively.
-        final next = ((level + 2) / 12).clamp(0.0, 1.0);
-        // Light smoothing to avoid jitter.
-        final smooth = _assistantSoundLevel01 * 0.65 + next * 0.35;
-        setState(() => _assistantSoundLevel01 = smooth);
-      },
-      listenOptions: SpeechListenOptions(
-        listenMode: ListenMode.confirmation,
-        partialResults: true,
-      ),
-      onResult: (result) {
-        final words = result.recognizedWords.trim();
-        if (words.isEmpty) return;
-        _setAssistantTranscript(words);
-      },
-    );
   }
 
   Future<void> _stopAssistantListening() async {
     if (!_assistantListening) return;
+    _assistantFinishListeningAndRun = null;
     try {
       await _speech.stop();
     } catch (_) {
       // Ignore stop errors; we'll still reset UI state.
     }
     if (!mounted) return;
-    HapticFeedback.selectionClick();
+    // Safely handle haptic feedback (may not be supported on all platforms)
+    try {
+      HapticFeedback.selectionClick();
+    } catch (_) {
+      // Ignore haptic feedback errors
+    }
     setState(() {
       _assistantListening = false;
       _assistantSoundLevel01 = 0.0;
@@ -232,139 +300,151 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     required AssistantClient assistantClient,
     required DateTime baseDate,
   }) async {
-    if (_assistantLoading) return;
+    // Wrap entire function in try-catch to prevent crashes on macOS
+    try {
+      if (_assistantLoading) return;
 
-    // If already listening, interpret a second tap as "stop + run now".
-    if (_assistantListening) {
-      await _stopAssistantListening();
-      if (!mounted) return;
-      await _runAssistant(assistantClient: assistantClient, baseDate: baseDate);
-      return;
-    }
+      // If already listening, interpret a second tap as "stop + run now".
+      if (_assistantListening) {
+        await _stopAssistantListening();
+        if (!mounted) return;
+        await _runAssistant(assistantClient: assistantClient, baseDate: baseDate);
+        return;
+      }
 
-    final ok = await _ensureSpeechReady();
-    if (!ok) {
-      if (!mounted) return;
-      _play(AppSfx.error);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_assistantSpeechError ?? 'Speech unavailable')),
-      );
-      return;
-    }
+      final ok = await _ensureSpeechReady();
+      if (!ok) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_assistantSpeechError ?? 'Speech unavailable')),
+        );
+        return;
+      }
 
-    final hasPerm = await _speech.hasPermission;
-    if (hasPerm == false) {
+      final hasPerm = await _speech.hasPermission;
+      if (hasPerm == false) {
+        if (!mounted) return;
+        setState(() {
+          _assistantSpeechError =
+              'Microphone / Speech permission denied. Enable it in Settings and try again.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_assistantSpeechError!)),
+        );
+        return;
+      }
+
+      // End customize mode if active; voice input should feel immediate.
+      if (_isCustomizingDashboard) {
+        setState(() => _isCustomizingDashboard = false);
+      }
+
+      // Session token prevents double-run if callbacks race.
+      final session = ++_assistantListenSession;
+      var didAutoRun = false;
+
+      Future<void> finishListeningAndRun() async {
+        // Guard against duplicate stop+run from multiple callbacks (finalResult,
+        // status changes, safety timeout).
+        if (didAutoRun) return;
+        if (!_assistantListening) return;
+        didAutoRun = true;
+        _assistantFinishListeningAndRun = null;
+
+        await _stopAssistantListening();
+
+        // Give the speech plugin a beat to deliver any final transcript update.
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+
+        if (!mounted) return;
+        if (session != _assistantListenSession) return;
+        await _runAssistant(assistantClient: assistantClient, baseDate: baseDate);
+      }
+
+      // Safely handle haptic feedback (may not be supported on all platforms)
+      try {
+        HapticFeedback.selectionClick();
+      } catch (_) {
+        // Ignore haptic feedback errors
+      }
+
       if (!mounted) return;
       setState(() {
-        _assistantSpeechError =
-            'Microphone / Speech permission denied. Enable it in Settings and try again.';
+        _assistantListening = true;
+        _assistantSpeechError = null;
+        _assistantSoundLevel01 = 0.0;
       });
-      _play(AppSfx.error);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_assistantSpeechError!)),
-      );
-      return;
-    }
 
-    // End customize mode if active; voice input should feel immediate.
-    if (_isCustomizingDashboard) {
-      setState(() => _isCustomizingDashboard = false);
-    }
-
-    // Session token prevents double-run if callbacks race.
-    final session = ++_assistantListenSession;
-
-    HapticFeedback.selectionClick();
-    setState(() {
-      _assistantListening = true;
-      _assistantSpeechError = null;
-      _assistantSoundLevel01 = 0.0;
-    });
-
-    try {
-      await _speech.listen(
-        onSoundLevelChange: (level) {
-          if (!mounted) return;
-          if (session != _assistantListenSession) return;
-          final next = ((level + 2) / 12).clamp(0.0, 1.0);
-          final smooth = _assistantSoundLevel01 * 0.65 + next * 0.35;
-          setState(() => _assistantSoundLevel01 = smooth);
-        },
-        listenOptions: SpeechListenOptions(
-          listenMode: ListenMode.confirmation,
-          partialResults: true,
-        ),
-        onResult: (result) async {
-          if (!mounted) return;
-          if (session != _assistantListenSession) return;
-
-          final words = result.recognizedWords.trim();
-          if (words.isNotEmpty) {
-            _setAssistantTranscript(words);
-          }
-
-          // When the engine considers the result final, stop listening and run.
-          if (result.finalResult) {
-            await _stopAssistantListening();
+      try {
+        await _speech.listen(
+          pauseFor: const Duration(seconds: 2),
+          onSoundLevelChange: (level) {
             if (!mounted) return;
             if (session != _assistantListenSession) return;
-            await _runAssistant(
-              assistantClient: assistantClient,
-              baseDate: baseDate,
-            );
-          }
-        },
-      );
-    } catch (_) {
+            final next = ((level + 2) / 12).clamp(0.0, 1.0);
+            final smooth = _assistantSoundLevel01 * 0.65 + next * 0.35;
+            setState(() => _assistantSoundLevel01 = smooth);
+          },
+          listenOptions: SpeechListenOptions(
+            listenMode: ListenMode.confirmation,
+            partialResults: true,
+          ),
+          onResult: (result) async {
+            if (!mounted) return;
+            if (session != _assistantListenSession) return;
+
+            final words = result.recognizedWords.trim();
+            if (words.isNotEmpty) {
+              _setAssistantTranscript(words);
+            }
+
+            // When the engine considers the result final, stop listening and run.
+            if (result.finalResult) {
+              await finishListeningAndRun();
+            }
+          },
+        );
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _assistantListening = false;
+          _assistantSoundLevel01 = 0.0;
+          _assistantSpeechError = kIsWeb
+              ? 'Speech unavailable in this environment.'
+              : 'Speech recognition error. Please try again.';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_assistantSpeechError!)),
+        );
+        return;
+      }
+
+      // Safety net: if we never get a finalResult/status, stop + run eventually.
+      // This should not normally trigger because `pauseFor` ends listening on silence.
+      Future<void>.delayed(const Duration(seconds: 60), () async {
+        if (!mounted) return;
+        if (session != _assistantListenSession) return;
+        if (!_assistantListening) return;
+        await finishListeningAndRun();
+      });
+    } catch (e, stackTrace) {
+      // Catch any unhandled exceptions to prevent crashes
       if (!mounted) return;
       setState(() {
         _assistantListening = false;
         _assistantSoundLevel01 = 0.0;
-        _assistantSpeechError = kIsWeb
-            ? 'Speech unavailable in this environment.'
-            : 'Speech unavailable';
+        _assistantSpeechError = 'Speech recognition unavailable. Please try again.';
       });
-      _play(AppSfx.error);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_assistantSpeechError!)),
+        SnackBar(
+          content: Text(_assistantSpeechError!),
+          duration: const Duration(seconds: 4),
+        ),
       );
-      return;
+      // Log the error for debugging
+      debugPrint('AI button error: $e');
+      debugPrint('Stack trace: $stackTrace');
     }
-
-    // Fallback: if we never receive a finalResult, stop + run after a short delay.
-    Future<void>.delayed(const Duration(seconds: 6), () async {
-      if (!mounted) return;
-      if (session != _assistantListenSession) return;
-      if (!_assistantListening) return;
-      await _stopAssistantListening();
-      if (!mounted) return;
-      if (session != _assistantListenSession) return;
-      await _runAssistant(assistantClient: assistantClient, baseDate: baseDate);
-    });
-  }
-
-  Future<void> _onAssistantHoldEnd({
-    required AssistantClient assistantClient,
-    required DateTime baseDate,
-  }) async {
-    if (!_assistantHoldArmed) return;
-    _assistantHoldArmed = false;
-
-    // Stop listening first; then run the assistant immediately on release.
-    await _stopAssistantListening();
-
-    // Give the speech plugin a beat to deliver any final transcript update.
-    await Future<void>.delayed(const Duration(milliseconds: 120));
-
-    if (!mounted) return;
-    await _runAssistant(assistantClient: assistantClient, baseDate: baseDate);
-  }
-
-  Size? _assistantRingSize() {
-    final ctx = _assistantRingKey.currentContext;
-    final renderObject = ctx?.findRenderObject();
-    if (renderObject is! RenderBox) return null;
-    return renderObject.size;
   }
 
   Future<void> _pickDate() async {
@@ -390,6 +470,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final trackersData = ref.watch(todayTrackersControllerProvider(ymd));
     final trackersController =
         ref.read(todayTrackersControllerProvider(ymd).notifier);
+    final activeSession = ref.watch(activeFocusSessionProvider).valueOrNull;
+    final activeTimebox = ref.watch(todayTimeboxControllerProvider(ymd));
     final env = ref.watch(envProvider);
     final supabaseState = ref.watch(supabaseProvider);
     final assistantClient = AssistantClient(
@@ -403,6 +485,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       _loadedReflectionForYmd = ymd;
       _reflectionController.text = today.reflection;
       _expandedTaskIds.clear();
+      _rolloverCheckForYmd = null;
+      _rolloverYesterdayIncompleteFuture = null;
+      _rolloverInFlight = false;
     }
 
     final mustWins =
@@ -430,9 +515,30 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       }
     }
 
+    TodayTask? timeboxTask;
+    if (activeTimebox?.taskId != null) {
+      for (final t in today.tasks) {
+        if (t.id == activeTimebox!.taskId) {
+          timeboxTask = t;
+          break;
+        }
+      }
+    }
+    final showActiveFocusTimer = activeTimebox != null &&
+        activeTimebox.kind == TodayTimerKind.focus &&
+        activeSession?.isActive == true;
+
     final dashboardOrder = ref.watch(dashboardLayoutControllerProvider);
     final dashboardController =
         ref.read(dashboardLayoutControllerProvider.notifier);
+
+    final shouldOfferRollover =
+        isToday && mustWins.isEmpty && niceTodos.isEmpty && !_rolloverInFlight;
+    if (shouldOfferRollover && _rolloverCheckForYmd != ymd) {
+      _rolloverCheckForYmd = ymd;
+      _rolloverYesterdayIncompleteFuture =
+          controller.getYesterdayIncompleteTasks();
+    }
 
     Widget buildHeader(
       String title, {
@@ -480,7 +586,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                buildHeader('Date', editing: editing, index: index),
+                // Only show header when editing (for drag handle).
+                if (editing)
+                  buildHeader('Date', editing: editing, index: index),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(AppSpace.s16),
@@ -518,18 +626,18 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                 icon: const Icon(Icons.chevron_left),
                                 label: const Text('Prev'),
                               ),
+                              if (!isToday)
+                                FilledButton.icon(
+                                  onPressed: () => setState(() => _date = now),
+                                  icon: const Icon(Icons.today),
+                                  label: const Text('Go to Now'),
+                                ),
                               OutlinedButton.icon(
                                 onPressed: () => setState(() => _date =
                                     _date.add(const Duration(days: 1))),
                                 icon: const Icon(Icons.chevron_right),
                                 label: const Text('Next'),
                               ),
-                              if (!isToday)
-                                FilledButton.icon(
-                                  onPressed: () => setState(() => _date = now),
-                                  icon: const Icon(Icons.today),
-                                  label: const Text('Go to Today'),
-                                ),
                             ],
                           ),
                         ),
@@ -547,173 +655,77 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 buildHeader('Assistant', editing: editing, index: index),
-                Stack(
-                  key: _assistantRingKey,
-                  children: [
-                    // Outline ring + content.
-                    Container(
-                      decoration: ShapeDecoration(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          side: BorderSide(
-                            width: 2.5,
-                            color: _assistantListening
-                                ? Theme.of(context).colorScheme.primary
-                                : Theme.of(context)
-                                    .dividerColor
-                                    .withOpacity(0.9),
-                          ),
-                        ),
-                      ),
-                      child: Card(
-                        margin: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpace.s16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: TextField(
-                                      controller: _assistantController,
-                                      focusNode: _assistantFocus,
-                                      textInputAction: TextInputAction.send,
-                                      onSubmitted: (_) => _runAssistant(
-                                        assistantClient: assistantClient,
-                                        baseDate: _date,
-                                      ),
-                                      decoration: InputDecoration(
-                                        labelText: 'Tell me what to do',
-                                        hintText:
-                                            'Ex: tomorrow add must win task: renew passport',
-                                        helperText: _assistantListening
-                                            ? 'Listening… release to run'
-                                            : 'Hold the outline to talk (release to run)',
-                                      ),
-                                      enabled: !_assistantLoading,
-                                    ),
-                                  ),
-                                  Gap.w8,
-                                  Container(
-                                    padding: const EdgeInsets.all(AppSpace.s8),
-                                    decoration: BoxDecoration(
-                                      color: _assistantListening
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .primaryContainer
-                                              .withOpacity(0.65)
-                                          : Theme.of(context)
-                                              .colorScheme
-                                              .surfaceContainerHighest
-                                              .withOpacity(0.55),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Icon(
-                                      _assistantListening
-                                          ? Icons.mic
-                                          : Icons.mic_none,
-                                      size: 18,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Gap.h12,
-                              FilledButton.icon(
-                                onPressed: _assistantLoading
-                                    ? null
-                                    : () => _runAssistant(
-                                          assistantClient: assistantClient,
-                                          baseDate: _date,
-                                        ),
-                                icon: _assistantLoading
-                                    ? const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      )
-                                    : const Icon(Icons.send),
-                                label: Text(
-                                    _assistantLoading ? 'Working…' : 'Run'),
-                              ),
-                              if ((_assistantSay ?? '').trim().isNotEmpty) ...[
-                                Gap.h12,
-                                Text(
-                                  _assistantSay!,
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                              ],
-                              if ((_assistantSpeechError ?? '')
-                                  .trim()
-                                  .isNotEmpty) ...[
-                                Gap.h8,
-                                Text(
-                                  _assistantSpeechError!,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .error),
-                                ),
-                              ],
-                              Gap.h8,
-                              Text(
-                                'Tip: “note: …”, “complete task …”, “add habit …”',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    // Press-and-hold handler: only starts if the long-press begins on the outline ring.
-                    Positioned.fill(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onLongPressStart: (details) async {
-                          // Require the long-press to start on the outline ring.
-                          // Make the hit target generous so it's easy to "grab" the outline.
-                          const ring = 28.0;
-                          final size = _assistantRingSize();
-                          if (size != null) {
-                            final pos = details.localPosition;
-                            final distToEdge = [
-                              pos.dx,
-                              pos.dy,
-                              size.width - pos.dx,
-                              size.height - pos.dy,
-                            ].reduce((a, b) => a < b ? a : b);
-                            final inRing = distToEdge <= ring;
-                            if (!inRing) {
-                              if (!mounted) return;
-                              // Keep this quiet (no SnackBar spam). The helper text already hints the rule.
-                              return;
-                            }
-                          }
-
-                          await _startAssistantListening();
-                          _assistantHoldArmed = true;
-                        },
-                        onLongPressEnd: (_) {
-                          _onAssistantHoldEnd(
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpace.s12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextField(
+                          controller: _assistantController,
+                          focusNode: _assistantFocus,
+                          textInputAction: TextInputAction.send,
+                          minLines: 1,
+                          maxLines: 2,
+                          onSubmitted: (_) => _runAssistant(
                             assistantClient: assistantClient,
                             baseDate: _date,
-                          );
-                        },
-                        onLongPressCancel: () {
-                          _assistantHoldArmed = false;
-                          _stopAssistantListening();
-                        },
-                      ),
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Ex: add must win task: renew passport',
+                            isDense: true,
+                            suffixIcon: _assistantLoading
+                                ? const Padding(
+                                    padding: EdgeInsets.all(AppSpace.s12),
+                                    child: SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    ),
+                                  )
+                                : IconButton(
+                                    tooltip: 'Run assistant',
+                                    onPressed: _assistantLoading
+                                        ? null
+                                        : () => _runAssistant(
+                                              assistantClient: assistantClient,
+                                              baseDate: _date,
+                                            ),
+                                    icon: const Icon(Icons.send),
+                                  ),
+                          ),
+                          enabled: !_assistantLoading,
+                        ),
+                        if (_assistantListening) ...[
+                          Gap.h8,
+                          Text(
+                            'Listening…',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                        if ((_assistantSay ?? '').trim().isNotEmpty) ...[
+                          Gap.h8,
+                          Text(
+                            _assistantSay!,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                        if ((_assistantSpeechError ?? '').trim().isNotEmpty) ...[
+                          Gap.h8,
+                          Text(
+                            _assistantSpeechError!,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                    color:
+                                        Theme.of(context).colorScheme.error),
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -746,6 +758,14 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        if (showActiveFocusTimer) ...[
+                          _ActiveFocusTimerCard(
+                            ymd: ymd,
+                            timer: activeTimebox,
+                            taskTitle: timeboxTask?.title,
+                          ),
+                          Gap.h12,
+                        ],
                         Text(
                           'One thing now',
                           style: Theme.of(context)
@@ -819,9 +839,23 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                               );
                               if (saved == true && context.mounted) return;
                             },
-                            onStartTimeboxMinutes: (minutes) {
+                            onStartTimeboxMinutes: (minutes) async {
+                              final task = focusTask;
+                              if (task == null) return;
+                              final timeboxController = ref.read(
+                                todayTimeboxControllerProvider(ymd).notifier,
+                              );
+                              final ok = await timeboxController.startFocus(
+                                taskId: task.id,
+                                minutes: minutes,
+                              );
+                              if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Start ($minutes min)')),
+                                SnackBar(
+                                  content: Text(ok
+                                      ? 'Focus timer started ($minutes min)'
+                                      : 'Timer already running'),
+                                ),
                               );
                             },
                             onImStuck: focusTask == null
@@ -847,8 +881,9 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                             taskTitle: ft.title,
                                           ),
                                         );
-                                        if (saved == true && context.mounted)
+                                        if (saved == true && context.mounted) {
                                           return;
+                                        }
                                       },
                                       onSwitchTask: mustWins.isEmpty
                                           ? null
@@ -896,6 +931,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           focusNode: _quickAddFocus,
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) => _submitQuickAdd(controller),
+                          enabled: !_quickAddInFlight,
                           decoration: const InputDecoration(
                             labelText: 'What’s the task?',
                             hintText: 'Ex: Send the email',
@@ -912,14 +948,25 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                 label: Text('Nice‑to‑Do')),
                           ],
                           selected: {_quickAddType},
-                          onSelectionChanged: (s) =>
-                              setState(() => _quickAddType = s.first),
+                          onSelectionChanged: _quickAddInFlight
+                              ? null
+                              : (s) => setState(() => _quickAddType = s.first),
                         ),
                         Gap.h12,
                         FilledButton.icon(
-                          onPressed: () => _submitQuickAdd(controller),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add'),
+                          onPressed: _quickAddInFlight
+                              ? null
+                              : () => _submitQuickAdd(controller),
+                          icon: _quickAddInFlight
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.add),
+                          label: Text(_quickAddInFlight ? 'Adding…' : 'Add'),
                         ),
                       ],
                     ),
@@ -1000,7 +1047,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                   habitId: h.id,
                                   completed: next,
                                 );
-                                if (next) _play(AppSfx.habitComplete);
+                                if (next) {}
                               },
                               title: Text(h.name),
                             ),
@@ -1143,7 +1190,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                                     trackerId: t.tracker.id,
                                                     itemKey: it.item.key,
                                                   );
-                                                  _play(AppSfx.trackerUp);
                                                 },
                                                 onDecrement: () async {
                                                   await trackersController
@@ -1151,7 +1197,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                                     trackerId: t.tracker.id,
                                                     itemKey: it.item.key,
                                                   );
-                                                  _play(AppSfx.trackerDown);
                                                 },
                                               ),
                                             ),
@@ -1185,16 +1230,79 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                       '${mustWins.where((t) => t.completed).length}/${mustWins.length}'),
                 ),
                 if (mustWins.isEmpty)
-                  EmptyStateCard(
-                    icon: Icons.flag_outlined,
-                    title: 'Pick 1–3 Must‑Wins',
-                    description:
-                        'Must‑Wins are the few things that make today a win. Keep it small.',
-                    ctaLabel: 'Add a Must‑Win',
-                    onCtaPressed: () {
-                      setState(() => _quickAddType = TodayTaskType.mustWin);
-                      _scrollToQuickAdd(context);
-                    },
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (isToday && mustWins.isEmpty && niceTodos.isEmpty)
+                        FutureBuilder<List<TodayTask>>(
+                          future: _rolloverYesterdayIncompleteFuture,
+                          builder: (context, snap) {
+                            final tasks = snap.data ?? const [];
+                            if (snap.connectionState != ConnectionState.done) {
+                              return const SizedBox.shrink();
+                            }
+                            if (tasks.isEmpty) return const SizedBox.shrink();
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _RolloverYesterdayCard(
+                                  count: tasks.length,
+                                  loading: _rolloverInFlight,
+                                  onPressed: _rolloverInFlight
+                                      ? null
+                                      : () async {
+                                          setState(
+                                              () => _rolloverInFlight = true);
+                                          try {
+                                            final moved = await controller
+                                                .rolloverYesterdayTasks();
+                                            if (!context.mounted) return;
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                content: Text(moved == 0
+                                                    ? 'No tasks to roll over'
+                                                    : 'Rolled over $moved task${moved == 1 ? '' : 's'}'),
+                                              ),
+                                            );
+                                          } catch (e) {
+                                            if (!context.mounted) return;
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              SnackBar(
+                                                  content:
+                                                      Text(friendlyError(e))),
+                                            );
+                                          } finally {
+                                            if (mounted) {
+                                              setState(() {
+                                                _rolloverInFlight = false;
+                                                _rolloverCheckForYmd = null;
+                                                _rolloverYesterdayIncompleteFuture =
+                                                    null;
+                                              });
+                                            }
+                                          }
+                                        },
+                                ),
+                                Gap.h12,
+                              ],
+                            );
+                          },
+                        ),
+                      EmptyStateCard(
+                        icon: Icons.flag_outlined,
+                        title: 'Pick 1–3 Must‑Wins',
+                        description:
+                            'Must‑Wins are the few things that make now a win. Keep it small.',
+                        ctaLabel: 'Add a Must‑Win',
+                        onCtaPressed: () {
+                          setState(() => _quickAddType = TodayTaskType.mustWin);
+                          _scrollToQuickAdd(context);
+                        },
+                      ),
+                    ],
                   )
                 else
                   _TasksCard(
@@ -1230,11 +1338,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                               .toList();
                           final allMustWinsDone = mustWinsAfter.isNotEmpty &&
                               mustWinsAfter.every((t) => t.completed);
-                          _play(allMustWinsDone
-                              ? AppSfx.bigWin
-                              : AppSfx.taskComplete);
+                          if (allMustWinsDone) {} else {}
                         } else {
-                          _play(AppSfx.taskComplete);
                         }
                       }
                     },
@@ -1323,7 +1428,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                       }
 
                       if (!wasCompleted && isCompleted) {
-                        _play(AppSfx.taskComplete);
                       }
                     },
                     onSetInProgress: controller.setTaskInProgress,
@@ -1407,7 +1511,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     }
 
     return AppScaffold(
-      title: 'Today',
+      title: 'Now',
       actions: [
         IconButton(
           tooltip: 'All tasks',
@@ -1567,13 +1671,11 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       if (!mounted) return;
 
       if (result.executedCount > 0) {
-        _play(AppSfx.assistantDone);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Done (${result.executedCount})')),
         );
       }
       if (result.errors.isNotEmpty) {
-        _play(AppSfx.error);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result.errors.first)),
         );
@@ -1592,18 +1694,31 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   }
 
   Future<void> _submitQuickAdd(TodayController controller) async {
+    // Guard against double-submission (e.g. user presses Enter + taps Add button,
+    // or double-taps the button before the first addTask completes).
+    if (_quickAddInFlight) return;
+
     final title = _quickAddController.text;
-    final ok = await controller.addTask(title: title, type: _quickAddType);
-    if (!ok) return;
-    _quickAddController.clear();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_quickAddType == TodayTaskType.mustWin
-            ? 'Added to Must‑Wins'
-            : 'Added to Nice‑to‑Do'),
-      ),
-    );
+    if (title.trim().isEmpty) return;
+
+    setState(() => _quickAddInFlight = true);
+    try {
+      final ok = await controller.addTask(title: title, type: _quickAddType);
+      if (!ok) return;
+      _quickAddController.clear();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_quickAddType == TodayTaskType.mustWin
+              ? 'Added to Must‑Wins'
+              : 'Added to Nice‑to‑Do'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _quickAddInFlight = false);
+      }
+    }
   }
 
   Future<String?> _pickFocusTask(
@@ -1817,6 +1932,59 @@ class _TasksCard extends StatelessWidget {
   }
 }
 
+class _RolloverYesterdayCard extends StatelessWidget {
+  const _RolloverYesterdayCard({
+    required this.count,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  final int count;
+  final bool loading;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final label = count == 1 ? '1 unfinished task' : '$count unfinished tasks';
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.s16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.replay, size: 28, color: theme.colorScheme.primary),
+            Gap.h12,
+            Text(
+              'Pick up where you left off?',
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            Gap.h8,
+            Text(
+              'You have $label from yesterday.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            Gap.h16,
+            FilledButton.icon(
+              onPressed: onPressed,
+              icon: loading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.call_made),
+              label: Text(loading ? 'Bringing…' : 'Bring to now'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _DashboardDragHandle extends StatelessWidget {
   const _DashboardDragHandle({required this.index});
 
@@ -1917,6 +2085,7 @@ class _TaskRow extends StatelessWidget {
     return Column(
       children: [
         ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.s8),
           leading: Checkbox(
             value: task.completed,
             onChanged: (_) => onToggle(task.id),
@@ -2297,6 +2466,122 @@ class _FocusActionLane extends ConsumerWidget {
         ),
       ],
     );
+  }
+}
+
+class _ActiveFocusTimerCard extends ConsumerStatefulWidget {
+  const _ActiveFocusTimerCard({
+    required this.ymd,
+    required this.timer,
+    this.taskTitle,
+  });
+
+  final String ymd;
+  final ActiveTodayTimer timer;
+  final String? taskTitle;
+
+  @override
+  ConsumerState<_ActiveFocusTimerCard> createState() =>
+      _ActiveFocusTimerCardState();
+}
+
+class _ActiveFocusTimerCardState
+    extends ConsumerState<_ActiveFocusTimerCard> {
+  int? _didScheduleReconcileForStartedAtMs;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = ref.watch(nowTickerProvider).valueOrNull ?? DateTime.now();
+    final remainingRaw = widget.timer.endsAt.difference(now);
+    final remaining = remainingRaw.isNegative ? Duration.zero : remainingRaw;
+    final totalSeconds = widget.timer.durationMinutes * 60;
+    final elapsedSeconds = now.difference(widget.timer.startedAt).inSeconds;
+    final progress = totalSeconds > 0
+        ? (elapsedSeconds / totalSeconds).clamp(0.0, 1.0)
+        : 0.0;
+
+    if (remaining == Duration.zero &&
+        _didScheduleReconcileForStartedAtMs != widget.timer.startedAtMs) {
+      _didScheduleReconcileForStartedAtMs = widget.timer.startedAtMs;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref
+            .read(todayTimeboxControllerProvider(widget.ymd).notifier)
+            .reconcileExpiredNow();
+      });
+    }
+
+    final theme = Theme.of(context);
+    final title = (widget.taskTitle ?? '').trim();
+    final mmss = _formatMmss(remaining);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpace.s12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: theme.colorScheme.primaryContainer.withOpacity(0.35),
+        border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.timer, color: theme.colorScheme.primary),
+              Gap.w8,
+              Expanded(
+                child: Text(
+                  'Focus timer',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                '${widget.timer.durationMinutes} min',
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
+          Gap.h8,
+          Center(
+            child: Text(
+              mmss,
+              style: theme.textTheme.displayMedium?.copyWith(
+                fontWeight: FontWeight.w800,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          if (title.isNotEmpty) ...[
+            Gap.h4,
+            Center(
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+          ],
+          Gap.h8,
+          LinearProgressIndicator(value: progress),
+          Gap.h8,
+          Text(
+            'Ends at ${DateFormat.Hm().format(widget.timer.endsAt)}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _formatMmss(Duration d) {
+    final total = d.inSeconds.clamp(0, 24 * 60 * 60);
+    final m = total ~/ 60;
+    final s = total % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
   }
 }
 

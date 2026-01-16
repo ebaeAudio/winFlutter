@@ -20,7 +20,7 @@ class WDropCelebrationOverlay extends StatefulWidget {
   /// Called after the animation completes.
   final VoidCallback? onCompleted;
 
-  /// Called once per spawned W (useful for tiny per-W sound effects).
+  /// Called once per spawned W (useful for per-particle feedback).
   final VoidCallback? onSpawn;
 
   /// Total particles emitted over [emitDuration].

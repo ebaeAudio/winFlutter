@@ -24,6 +24,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Win The Year uses the microphone to capture your voice for the assistant.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Win The Year uses speech recognition to convert your voice into text for the assistant.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
 	<key>NSMainNibFile</key>

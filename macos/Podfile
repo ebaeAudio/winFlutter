@@ -39,5 +39,10 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
+    # Some pods still ship with very old macOS deployment targets (e.g. 10.11),
+    # which triggers warnings (and can break newer Xcode toolchains).
+    target.build_configurations.each do |config|
+      config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '11.0'
+    end
   end
 end

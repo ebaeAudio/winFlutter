@@ -1,10 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 
 import '../../platform/nfc/nfc_card_service.dart';
+import '../../platform/nfc/nfc_scan_help.dart';
 import '../../platform/nfc/nfc_scan_purpose.dart';
+import '../components/info_banner.dart';
 import '../spacing.dart';
 
 class NfcScanSheetResult {
@@ -51,6 +54,8 @@ class NfcScanSheet extends ConsumerStatefulWidget {
 class _NfcScanSheetState extends ConsumerState<NfcScanSheet> {
   String? _error;
   bool _scanning = false;
+  bool? _available;
+  String? _lastDiagnostics;
 
   @override
   void initState() {
@@ -83,11 +88,13 @@ class _NfcScanSheetState extends ConsumerState<NfcScanSheet> {
     });
 
     final available = await NfcManager.instance.isAvailable();
+    _available = available;
     if (!available) {
       if (!mounted) return;
       setState(() {
         _scanning = false;
-        _error = 'NFC is not available on this device.';
+        _error =
+            'NFC is not available. Turn on NFC in system settings, or use a device that supports NFC.';
       });
       return;
     }
@@ -97,13 +104,14 @@ class _NfcScanSheetState extends ConsumerState<NfcScanSheet> {
     try {
       await NfcManager.instance.startSession(
         onDiscovered: (tag) async {
-          final hash = await svc.tryReadPairedKeyHashFromTag(tag);
+          final attempt = await svc.readKeyHashWithDiagnostics(tag);
           if (!mounted) return;
 
-          if (hash == null || hash.isEmpty) {
+          if (attempt.keyHash == null || attempt.keyHash!.isEmpty) {
             setState(() {
               _error =
                   'Couldn’t read this tag. Try again, or use a different NFC tag/card.';
+              _lastDiagnostics = attempt.diagnostics;
             });
             await _stopSessionSilently();
             // Restart automatically after a short beat so the user can rescan.
@@ -117,7 +125,8 @@ class _NfcScanSheetState extends ConsumerState<NfcScanSheet> {
 
           await _stopSessionSilently();
           if (!mounted) return;
-          Navigator.of(context).pop(NfcScanSheetResult._(keyHash: hash));
+          Navigator.of(context)
+              .pop(NfcScanSheetResult._(keyHash: attempt.keyHash!));
         },
       );
     } catch (e) {
@@ -125,6 +134,7 @@ class _NfcScanSheetState extends ConsumerState<NfcScanSheet> {
       setState(() {
         _scanning = false;
         _error = 'Failed to start NFC scan: $e';
+        _lastDiagnostics = 'Failed to start NFC scan: $e';
       });
     }
   }
@@ -154,73 +164,163 @@ class _NfcScanSheetState extends ConsumerState<NfcScanSheet> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
 
     return SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(AppSpace.s16, AppSpace.s8, AppSpace.s16, AppSpace.s16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _titleFor(widget.purpose),
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            Gap.h8,
-            Text(
-              _bodyFor(widget.purpose),
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            Gap.h16,
-            Row(
-              children: [
-                Icon(
-                  _error == null ? Icons.nfc : Icons.error_outline,
-                  color: _error == null ? cs.primary : cs.error,
-                ),
-                Gap.w12,
-                Expanded(
-                  child: Text(
-                    _error ??
-                        (_scanning
-                            ? 'Scanning…'
-                            : 'Ready to scan. Tap “Try again” if needed.'),
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: _error == null ? cs.onSurface : cs.error,
-                          fontWeight: _error == null ? FontWeight.w500 : FontWeight.w700,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _titleFor(widget.purpose),
+                style: theme.textTheme.titleLarge,
+              ),
+              Gap.h8,
+              Text(
+                _bodyFor(widget.purpose),
+                style: theme.textTheme.bodyMedium,
+              ),
+              Gap.h16,
+              InfoBanner(
+                title: 'How to scan',
+                message: nfcHowToScanChecklist(widget.purpose),
+                tone: InfoBannerTone.neutral,
+              ),
+              Gap.h12,
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: const EdgeInsets.only(bottom: AppSpace.s12),
+                title: const Text('Troubleshooting & debug'),
+                subtitle: const Text('What to try if scanning fails'),
+                children: [
+                  InfoBanner(
+                    title: 'Troubleshooting',
+                    message: nfcTroubleshootingChecklist(
+                      purpose: widget.purpose,
+                      platform: defaultTargetPlatform,
+                    ),
+                    tone: InfoBannerTone.warning,
+                  ),
+                  if (_available != null || _lastDiagnostics != null) ...[
+                    Gap.h12,
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpace.s16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Debug info',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            Gap.h8,
+                            SelectableText(
+                              [
+                                if (_available != null)
+                                  'NFC available: $_available',
+                                'Scanning: $_scanning',
+                                if (_error != null) 'Last error: $_error',
+                                if (_lastDiagnostics != null) ...[
+                                  '',
+                                  _lastDiagnostics!,
+                                ],
+                              ].join('\n'),
+                              style: theme.textTheme.bodySmall,
+                            ),
+                            Gap.h12,
+                            Row(
+                              children: [
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    final text = [
+                                      'NFC debug info',
+                                      'Purpose: ${widget.purpose.name}',
+                                      'Platform: $defaultTargetPlatform',
+                                      if (_available != null)
+                                        'NFC available: $_available',
+                                      'Scanning: $_scanning',
+                                      if (_error != null) 'Last error: $_error',
+                                      if (_lastDiagnostics != null)
+                                        _lastDiagnostics!,
+                                    ].join('\n');
+                                    await Clipboard.setData(
+                                      ClipboardData(text: text),
+                                    );
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text('Debug info copied.')),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.copy),
+                                  label: const Text('Copy debug info'),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              Gap.h8,
+              Row(
+                children: [
+                  Icon(
+                    _error == null ? Icons.nfc : Icons.error_outline,
+                    color: _error == null ? cs.primary : cs.error,
                   ),
-                ),
-              ],
-            ),
-            Gap.h16,
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () async {
-                      await _stopSessionSilently();
-                      if (!mounted) return;
-                      Navigator.of(context).pop(null);
-                    },
-                    child: const Text('Cancel'),
+                  Gap.w12,
+                  Expanded(
+                    child: Text(
+                      _error ??
+                          (_scanning
+                              ? 'Scanning…'
+                              : 'Ready to scan. Tap “Try again” if needed.'),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                            color: _error == null ? cs.onSurface : cs.error,
+                            fontWeight:
+                                _error == null ? FontWeight.w500 : FontWeight.w700,
+                          ),
+                    ),
                   ),
-                ),
-                Gap.w12,
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _scanning
-                        ? null
-                        : () async {
-                            await _startScan();
-                          },
-                    child: const Text('Try again'),
+                ],
+              ),
+              Gap.h16,
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () async {
+                        await _stopSessionSilently();
+                        if (!mounted) return;
+                        Navigator.of(context).pop(null);
+                      },
+                      child: const Text('Cancel'),
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  Gap.w12,
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _scanning
+                          ? null
+                          : () async {
+                              await _startScan();
+                            },
+                      child: const Text('Try again'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

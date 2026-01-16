@@ -4,11 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart' show sharedPreferencesProvider;
+import '../../domain/focus/focus_friction.dart';
 import '../../domain/focus/focus_session.dart';
 import 'focus_providers.dart';
 import 'focus_session_controller.dart';
+import 'task_unlock/active_session_task_unlock_controller.dart';
+import '../today/today_controller.dart';
 
 @immutable
 class DumbPhoneSessionGateState {
@@ -299,11 +303,13 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
     required String policyId,
     Duration? duration,
     DateTime? endsAt,
+    FocusFrictionSettings? frictionOverride,
   }) async {
     return await ref.read(activeFocusSessionProvider.notifier).startSession(
           policyId: policyId,
           duration: duration,
           endsAt: endsAt,
+          frictionOverride: frictionOverride,
         );
   }
 
@@ -313,6 +319,10 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
     required Future<bool> Function(BuildContext context) ensureCardValidated,
     required Future<bool> Function(BuildContext context) ensureSelfieValidated,
   }) async {
+    if (reason == FocusSessionEndReason.userEarlyExit) {
+      final ok = await _ensureUnlockTasksSatisfied(context);
+      if (!ok) return;
+    }
     final current = state.valueOrNull;
     if (current?.requireCardToEndEarly == true &&
         reason == FocusSessionEndReason.userEarlyExit) {
@@ -325,6 +335,49 @@ class DumbPhoneSessionGateController extends AsyncNotifier<DumbPhoneSessionGateS
       if (!ok) return;
     }
     await ref.read(activeFocusSessionProvider.notifier).endSession(reason: reason);
+  }
+
+  Future<bool> _ensureUnlockTasksSatisfied(BuildContext context) async {
+    final config =
+        ref.read(activeSessionTaskUnlockControllerProvider).valueOrNull;
+    final requiredCount = config?.requiredCount ?? 0;
+    final ymd = config?.ymd;
+    if (requiredCount <= 0 || ymd == null || ymd.isEmpty) return true;
+
+    final today = ref.read(todayControllerProvider(ymd));
+    final byId = {for (final t in today.tasks) t.id: t};
+    int done = 0;
+    int missing = 0;
+    for (final id in config!.requiredTaskIds) {
+      final t = byId[id];
+      if (t == null) {
+        missing++;
+      } else if (t.completed) {
+        done++;
+      }
+    }
+
+    final satisfied = done >= requiredCount &&
+        missing == 0 &&
+        config.requiredTaskIds.length == requiredCount;
+    if (satisfied) return true;
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            missing > 0
+                ? 'You have $missing missing unlock task(s). Edit your unlock tasks first.'
+                : 'Complete unlock tasks to end early ($done/$requiredCount).',
+          ),
+          action: SnackBarAction(
+            label: 'Today',
+            onPressed: () => GoRouter.of(context).go('/today?ymd=$ymd'),
+          ),
+        ),
+      );
+    }
+    return false;
   }
 }
 

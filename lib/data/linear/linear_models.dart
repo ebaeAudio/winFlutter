@@ -59,6 +59,7 @@ class LinearIssue {
     required this.identifier,
     required this.title,
     required this.url,
+    required this.description,
     required this.state,
     required this.teamId,
     required this.teamStates,
@@ -69,6 +70,7 @@ class LinearIssue {
   final String identifier;
   final String title;
   final String url;
+  final String description;
   final LinearIssueState state;
   final String teamId;
   final List<LinearIssueState> teamStates;
@@ -82,4 +84,3 @@ class LinearIssue {
     return null;
   }
 }
-

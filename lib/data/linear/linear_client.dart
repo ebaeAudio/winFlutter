@@ -65,6 +65,7 @@ query IssueByIdentifier($identifier: String!) {
       id
       identifier
       title
+      description
       url
       state { id name type }
       assignee { name displayName }
@@ -79,16 +80,18 @@ query IssueByIdentifier($identifier: String!) {
       variables: {'identifier': id},
     );
 
-    final nodes = (((res['data'] as Map?)?['issues'] as Map?)?['nodes'] as List?) ??
-        const [];
+    final nodes =
+        (((res['data'] as Map?)?['issues'] as Map?)?['nodes'] as List?) ??
+            const [];
     if (nodes.isEmpty) return null;
     final first = nodes.first;
     if (first is! Map) return null;
     final m = Map<String, Object?>.from(first);
 
     final stateRaw = m['state'];
-    final stateMap =
-        stateRaw is Map ? Map<String, Object?>.from(stateRaw) : const <String, Object?>{};
+    final stateMap = stateRaw is Map
+        ? Map<String, Object?>.from(stateRaw)
+        : const <String, Object?>{};
     final state = LinearIssueState(
       id: (stateMap['id'] as String?) ?? '',
       name: (stateMap['name'] as String?) ?? '',
@@ -103,8 +106,9 @@ query IssueByIdentifier($identifier: String!) {
     }
 
     final teamRaw = m['team'];
-    final teamMap =
-        teamRaw is Map ? Map<String, Object?>.from(teamRaw) : const <String, Object?>{};
+    final teamMap = teamRaw is Map
+        ? Map<String, Object?>.from(teamRaw)
+        : const <String, Object?>{};
     final teamId = (teamMap['id'] as String?) ?? '';
     final statesRaw = (teamMap['states'] as Map?)?['nodes'];
     final statesList = statesRaw is List ? statesRaw : const [];
@@ -125,6 +129,7 @@ query IssueByIdentifier($identifier: String!) {
       id: (m['id'] as String?) ?? '',
       identifier: (m['identifier'] as String?) ?? id,
       title: (m['title'] as String?) ?? '',
+      description: (m['description'] as String?) ?? '',
       url: (m['url'] as String?) ?? '',
       state: state,
       teamId: teamId,
@@ -195,4 +200,3 @@ mutation IssueUpdateState($id: String!, $stateId: String!) {
     return map;
   }
 }
-

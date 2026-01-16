@@ -285,6 +285,8 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Saved')),
       );
+      // After a successful save, return to the previous screen.
+      context.pop(true);
     } catch (e) {
       if (!mounted) return;
       setState(() {

@@ -70,7 +70,7 @@ class _ConversationBorderState extends State<ConversationBorder>
               builder: (context, _) {
                 final scheme = Theme.of(context).colorScheme;
 
-                // On some platforms sound level callbacks can be flat/rare, so we
+                // On some platforms mic level callbacks can be flat/rare, so we
                 // include a subtle baseline pulse to keep it feeling alive.
                 final inputLevel = widget.level.clamp(0.0, 1.0);
                 final wobble =

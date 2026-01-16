@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../ui/app_scaffold.dart';
 import '../../ui/components/empty_state_card.dart';
@@ -16,6 +18,8 @@ class ProjectsScreen extends StatelessWidget {
     return AppScaffold(
       title: 'Projects',
       children: [
+        const _SecretNotesEntryCard(),
+        Gap.h16,
         const EmptyStateCard(
           icon: Icons.workspaces_outline,
           title: 'Projects (MVP direction)',
@@ -175,6 +179,67 @@ class ProjectsScreen extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SecretNotesEntryCard extends StatelessWidget {
+  const _SecretNotesEntryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Semantics(
+      button: true,
+      label: 'Secret notes. Long press to open.',
+      child: Tooltip(
+        message: 'Long press to open',
+        child: Card(
+          child: InkWell(
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Tip: press and hold to open')),
+              );
+            },
+            onLongPress: () async {
+              await HapticFeedback.mediumImpact();
+              if (!context.mounted) return;
+              context.push('/projects/secret-notes');
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpace.s16),
+              child: Row(
+                children: [
+                  Icon(Icons.lock_outline, color: scheme.primary),
+                  Gap.w12,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Secret notes',
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                        ),
+                        Gap.h4,
+                        Text(
+                          'Press and hold to open the draft notes page.',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Gap.w12,
+                  Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

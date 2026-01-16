@@ -27,8 +27,8 @@ class NavShell extends ConsumerWidget {
         icon: Icons.check_circle_outline,
         label: 'Tasks',
       ),
-      CornerNavBubbleDestination(icon: Icons.today, label: 'Today'),
-      CornerNavBubbleDestination(icon: Icons.lock, label: 'Focus'),
+      CornerNavBubbleDestination(icon: Icons.today, label: 'Now'),
+      CornerNavBubbleDestination(icon: Icons.lock, label: 'Dumb'),
       CornerNavBubbleDestination(icon: Icons.settings, label: 'Settings'),
     ];
 
@@ -80,8 +80,8 @@ class NavShell extends ConsumerWidget {
                   icon: Icon(Icons.check_circle_outline),
                   label: 'Tasks',
                 ),
-                NavigationDestination(icon: Icon(Icons.today), label: 'Today'),
-                NavigationDestination(icon: Icon(Icons.lock), label: 'Focus'),
+                NavigationDestination(icon: Icon(Icons.today), label: 'Now'),
+                NavigationDestination(icon: Icon(Icons.lock), label: 'Dumb'),
                 NavigationDestination(
                   icon: Icon(Icons.settings),
                   label: 'Settings',

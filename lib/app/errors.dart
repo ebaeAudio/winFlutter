@@ -30,6 +30,14 @@ String friendlyError(Object error) {
     final hint = (error.hint?.toString() ?? '').toLowerCase();
     final combined = '$msg $details $hint';
 
+    // Feedback constraints (keep these aligned with supabase migrations).
+    if (combined.contains('user_feedback_description_length')) {
+      return 'Your description is too long. Keep it under 280 characters, then try again.';
+    }
+    if (combined.contains('user_feedback_details_length')) {
+      return 'Your details are too long. Keep them under 2000 characters, then try again.';
+    }
+
     // Common schema mismatch when the repo code is newer than the Supabase DB.
     bool looksLikeMissingColumn(String column) {
       final c = column.toLowerCase();
@@ -62,8 +70,36 @@ String friendlyError(Object error) {
       return 'Permission denied by the database (RLS). Check your Supabase policies, then try again.';
     }
 
+    // Check for function/table not found errors
+    if (combined.contains('function') && 
+        (combined.contains('does not exist') || combined.contains('not found'))) {
+      if (combined.contains('is_admin')) {
+        return 'The is_admin() function is missing. Apply the migration in supabase/migrations/20260115_000001_admin_users.sql, then restart the app.';
+      }
+      if (combined.contains('admin_list_users')) {
+        return 'The admin_list_users() function is missing. Apply the migration in supabase/migrations/20260116_000001_admin_user_management.sql, then restart the app.';
+      }
+      return 'Database function not found. Make sure all migrations are applied.';
+    }
+
+    // Check for missing admin_users table
+    if ((combined.contains('admin_users') || combined.contains('admin users')) &&
+        (combined.contains('does not exist') || 
+         combined.contains('could not find the table') ||
+         (combined.contains('relation') && combined.contains('does not exist')))) {
+      return 'The admin_users table is missing. Apply the migration in supabase/migrations/20260115_000001_admin_users.sql, then restart the app.';
+    }
+
+    // Check for missing user_feedback table
+    if ((combined.contains('user_feedback') || combined.contains('user feedback')) &&
+        (combined.contains('does not exist') || 
+         combined.contains('could not find the table') ||
+         (combined.contains('relation') && combined.contains('does not exist')))) {
+      return 'The user_feedback table is missing. Apply the migration in supabase/migrations/20260112_000001_user_feedback.sql, then restart the app.';
+    }
+
     // Keep it concise; raw details can be shown via `showErrorDialog` when needed.
-    return 'Could not save changes. Please try again.';
+    return 'Database error. Please try again.';
   }
 
   return 'Something went wrong. Please try again.';

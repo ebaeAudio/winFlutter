@@ -73,8 +73,8 @@ class TodayController extends StateNotifier<TodayDayData> {
         reflection: _prefs.getString(_keyForReflection(_ymd)) ?? '',
         focusModeEnabled: _prefs.getBool(_keyForFocusEnabled(_ymd)) ?? false,
         focusTaskId: _prefs.getString(_keyForFocusTaskId(_ymd)),
-        activeTimebox:
-            ActiveTimebox.fromJsonString(_prefs.getString(_keyForActiveTimebox(_ymd)) ?? ''),
+        activeTimebox: ActiveTimebox.fromJsonString(
+            _prefs.getString(_keyForActiveTimebox(_ymd)) ?? ''),
       );
       unawaited(_loadTasksFromSupabase());
     }
@@ -97,6 +97,102 @@ class TodayController extends StateNotifier<TodayDayData> {
   static String _keyForActiveTimebox(String ymd) => 'today_active_timebox_$ymd';
 
   bool get _isSupabaseMode => _tasksRepository != null;
+
+  static String _formatYmd(DateTime dt) {
+    final y = dt.year.toString().padLeft(4, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final d = dt.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  String? _yesterdayYmd() {
+    final parsed = DateTime.tryParse(_ymd);
+    if (parsed == null) return null;
+    final day = DateTime(parsed.year, parsed.month, parsed.day);
+    return _formatYmd(day.subtract(const Duration(days: 1)));
+  }
+
+  /// Returns yesterday's incomplete tasks (best-effort, non-throwing).
+  ///
+  /// - Supabase mode: queries yesterday’s tasks from DB.
+  /// - Local/demo mode: reads yesterday’s cached day JSON from SharedPreferences.
+  Future<List<TodayTask>> getYesterdayIncompleteTasks() async {
+    final yYmd = _yesterdayYmd();
+    if (yYmd == null || yYmd.trim().isEmpty) return const [];
+
+    if (_isSupabaseMode) {
+      final repo = _tasksRepository;
+      if (repo == null) return const [];
+      try {
+        final tasks = await repo.listForDate(ymd: yYmd);
+        return [
+          for (final t in tasks)
+            if (!t.completed) _toTodayTask(t),
+        ];
+      } catch (_) {
+        return const [];
+      }
+    }
+
+    final raw = _prefs.getString(_keyForLocalDay(yYmd));
+    if (raw == null || raw.trim().isEmpty) return const [];
+    final yDay = TodayDayData.fromJsonString(raw, fallbackYmd: yYmd);
+    return [for (final t in yDay.tasks) if (!t.completed) t];
+  }
+
+  /// Moves yesterday’s incomplete tasks onto this controller’s day.
+  ///
+  /// Safety: if today already has tasks (in DB or local state), this is a no-op.
+  Future<int> rolloverYesterdayTasks() async {
+    final yYmd = _yesterdayYmd();
+    if (yYmd == null || yYmd.trim().isEmpty) return 0;
+
+    if (_isSupabaseMode) {
+      final repo = _tasksRepository;
+      if (repo == null) return 0;
+
+      // Safety check: don’t roll over if today already has tasks in DB.
+      try {
+        final todayExisting = await repo.listForDate(ymd: _ymd);
+        if (todayExisting.isNotEmpty) return 0;
+      } catch (_) {
+        // If we can't verify, fail safe (don’t move data).
+        return 0;
+      }
+
+      final yesterday = await getYesterdayIncompleteTasks();
+      if (yesterday.isEmpty) return 0;
+
+      await Future.wait([
+        for (final t in yesterday) repo.update(id: t.id, ymd: _ymd),
+      ]);
+
+      await _loadTasksFromSupabase();
+      return yesterday.length;
+    }
+
+    // Local/demo mode.
+    if (state.tasks.isNotEmpty) return 0;
+
+    final rawYesterday = _prefs.getString(_keyForLocalDay(yYmd));
+    final yDay = (rawYesterday == null || rawYesterday.trim().isEmpty)
+        ? TodayDayData.empty(yYmd)
+        : TodayDayData.fromJsonString(rawYesterday, fallbackYmd: yYmd);
+
+    final moving = [for (final t in yDay.tasks) if (!t.completed) t];
+    if (moving.isEmpty) return 0;
+
+    final remainingYesterday =
+        yDay.copyWith(tasks: [for (final t in yDay.tasks) if (t.completed) t]);
+    await _prefs.setString(
+        _keyForLocalDay(yYmd), remainingYesterday.toJsonString());
+
+    // Use current state as "today" day data.
+    final nextToday = state.copyWith(tasks: [...state.tasks, ...moving]);
+    await _saveLocalDay(nextToday);
+    unawaited(_autoSelectFocusTaskIfNeeded());
+    return moving.length;
+  }
 
   Future<void> _maybeSyncLinear({
     required String taskId,
@@ -141,7 +237,9 @@ class TodayController extends StateNotifier<TodayDayData> {
         // Best-effort revert: move away from completed back to started/unstarted.
         desiredType = issue.findTeamStateByType('started') != null
             ? 'started'
-            : (issue.findTeamStateByType('unstarted') != null ? 'unstarted' : null);
+            : (issue.findTeamStateByType('unstarted') != null
+                ? 'unstarted'
+                : null);
       } else if (inProgress == false) {
         // If user explicitly turns off in-progress, revert to unstarted if possible.
         desiredType = issue.findTeamStateByType('unstarted') != null
@@ -151,7 +249,8 @@ class TodayController extends StateNotifier<TodayDayData> {
 
       if (desiredType == null || desiredType.trim().isEmpty) return;
 
-      final updated = await repo.setIssueStateType(issue: issue, stateType: desiredType);
+      final updated =
+          await repo.setIssueStateType(issue: issue, stateType: desiredType);
       if (updated == null) {
         await _recordLinearSyncStatus(
           at: DateTime.now(),
@@ -339,16 +438,69 @@ class TodayController extends StateNotifier<TodayDayData> {
     final trimmed = title.trim();
     if (trimmed.isEmpty) return false;
 
+    // If the user pastes a Linear URL or identifier, best-effort "import" it
+    // into a nice title + notes so the task reads cleanly.
+    //
+    // This is intentionally best-effort and must never block task creation.
+    String resolvedTitle = trimmed;
+    String? resolvedNotes;
+    final repo = _linearIssueRepository;
+    final linearRef = LinearIssueRef.tryParseFromText(trimmed);
+
+    // Even without an API key, we can still:
+    // - store the Linear URL in notes (so previews show up later once configured)
+    // - generate a nicer title using the URL slug
+    final linearUrl = _extractLinearUrl(trimmed);
+    if (linearRef != null && linearUrl != null) {
+      final fallbackTitle = _tryBuildLinearTitleFromUrl(linearUrl);
+      if (fallbackTitle != null && fallbackTitle.trim().isNotEmpty) {
+        resolvedTitle = fallbackTitle;
+      }
+      resolvedNotes = linearUrl;
+    }
+
+    if (repo != null && linearRef != null) {
+      try {
+        final issue = await repo.getIssueByIdentifier(linearRef.identifier);
+        if (issue != null) {
+          final issueTitle = issue.title.trim();
+          resolvedTitle = issueTitle.isEmpty
+              ? issue.identifier
+              : '${issue.identifier} — $issueTitle';
+          resolvedNotes = _formatLinearNotes(issue);
+        }
+      } catch (_) {
+        // Ignore: never block task creation on Linear.
+      }
+    }
+
     if (_isSupabaseMode) {
       final repo = _tasksRepository!;
       final created = await repo.create(
-        title: trimmed,
+        title: resolvedTitle,
         type: type == TodayTaskType.mustWin
             ? data.TaskType.mustWin
             : data.TaskType.niceToDo,
         ymd: _ymd,
       );
       state = state.copyWith(tasks: [...state.tasks, _toTodayTask(created)]);
+
+      // Best-effort: write notes after creation (schema may not have notes yet).
+      if (resolvedNotes != null && resolvedNotes.trim().isNotEmpty) {
+        try {
+          final detailsRepo = _taskDetailsRepository;
+          if (detailsRepo != null) {
+            await detailsRepo.updateDetails(
+                taskId: created.id, notes: resolvedNotes);
+          } else {
+            // Back-compat: if we don't have a details repo, still try to store
+            // in the tasks table `details` column for older schemas.
+            await repo.update(id: created.id, details: resolvedNotes);
+          }
+        } catch (_) {
+          // Ignore: notes are a nice-to-have.
+        }
+      }
       return true;
     }
 
@@ -356,13 +508,54 @@ class TodayController extends StateNotifier<TodayDayData> {
     final id = '${nowMs}_${DateTime.now().microsecondsSinceEpoch}';
     final task = TodayTask(
         id: id,
-        title: trimmed,
+        title: resolvedTitle,
         type: type,
         completed: false,
         inProgress: false,
-        createdAtMs: nowMs);
+        createdAtMs: nowMs,
+        // Local mode stores details/notes inline with the task.
+        details: resolvedNotes,
+        notes: resolvedNotes);
     await _saveLocalDay(state.copyWith(tasks: [...state.tasks, task]));
     return true;
+  }
+
+  static String _formatLinearNotes(LinearIssue issue) {
+    final url = issue.url.trim();
+    final description = issue.description.trim();
+    if (url.isEmpty) return description;
+    if (description.isEmpty) return url;
+    return '$url\n\n$description';
+  }
+
+  static final RegExp _linearUrlRegex = RegExp(r'https?://linear\.app/\S+');
+
+  static String? _extractLinearUrl(String text) {
+    final match = _linearUrlRegex.firstMatch(text);
+    if (match == null) return null;
+    return text.substring(match.start, match.end);
+  }
+
+  static String? _tryBuildLinearTitleFromUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
+    if (uri.host.trim().toLowerCase() != 'linear.app') return null;
+
+    final segments = uri.pathSegments;
+    final issueIdx = segments.indexOf('issue');
+    if (issueIdx < 0 || issueIdx + 1 >= segments.length) return null;
+
+    final identifier = segments[issueIdx + 1].trim();
+    if (identifier.isEmpty) return null;
+
+    final slug =
+        (issueIdx + 2 < segments.length) ? segments[issueIdx + 2].trim() : '';
+    final prettySlug = slug.isEmpty
+        ? ''
+        : Uri.decodeComponent(slug).replaceAll('-', ' ').trim();
+
+    if (prettySlug.isEmpty) return identifier;
+    return '$identifier — $prettySlug';
   }
 
   Future<void> toggleTaskCompleted(String taskId) async {
@@ -370,12 +563,11 @@ class TodayController extends StateNotifier<TodayDayData> {
       final current = state.tasks.where((t) => t.id == taskId).toList();
       if (current.isEmpty) return;
       final nextCompleted = !current.first.completed;
-      final updated =
-          await _tasksRepository!.update(
-            id: taskId,
-            completed: nextCompleted,
-            inProgress: nextCompleted ? false : null,
-          );
+      final updated = await _tasksRepository!.update(
+        id: taskId,
+        completed: nextCompleted,
+        inProgress: nextCompleted ? false : null,
+      );
       final nextTasks = [
         for (final t in state.tasks)
           if (t.id == taskId) _toTodayTask(updated) else t,
@@ -408,12 +600,11 @@ class TodayController extends StateNotifier<TodayDayData> {
 
   Future<void> setTaskCompleted(String taskId, bool completed) async {
     if (_isSupabaseMode) {
-      final updated =
-          await _tasksRepository!.update(
-            id: taskId,
-            completed: completed,
-            inProgress: completed ? false : null,
-          );
+      final updated = await _tasksRepository!.update(
+        id: taskId,
+        completed: completed,
+        inProgress: completed ? false : null,
+      );
       final nextTasks = [
         for (final t in state.tasks)
           if (t.id == taskId) _toTodayTask(updated) else t,
@@ -542,7 +733,8 @@ class TodayController extends StateNotifier<TodayDayData> {
   }) async {
     final trimmed = details.trim();
     if (trimmed.length > maxTaskDetailsChars) {
-      throw const FormatException('Details must be $maxTaskDetailsChars characters or less.');
+      throw const FormatException(
+          'Details must be $maxTaskDetailsChars characters or less.');
     }
     final next = trimmed.isEmpty ? null : trimmed;
 
@@ -756,8 +948,4 @@ class TodayController extends StateNotifier<TodayDayData> {
     ];
     state = state.copyWith(habits: nextHabits);
   }
-}
-
-extension<T> on List<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

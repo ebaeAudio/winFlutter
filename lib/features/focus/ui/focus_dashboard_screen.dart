@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -12,19 +13,21 @@ import '../../../domain/focus/focus_friction.dart';
 import '../../../ui/app_scaffold.dart';
 import '../../../ui/spacing.dart';
 import '../../../app/user_settings.dart';
-import '../../../platform/sound/sound_service.dart';
 import '../../../platform/nfc/nfc_card_service.dart';
 import '../../../platform/nfc/nfc_scan_purpose.dart';
 import '../../../platform/nfc/nfc_scan_service.dart';
 import '../../../ui/components/w_drop_celebration_overlay.dart';
 import '../../today/today_controller.dart';
+import '../../today/today_models.dart';
 import '../../today/today_timebox_controller.dart';
 import '../dumb_phone_session_gate_controller.dart';
 import '../focus_policy_controller.dart';
 import '../focus_session_controller.dart';
 import '../focus_ticker_provider.dart';
 import '../w_celebration_decider.dart';
+import '../task_unlock/active_session_task_unlock_controller.dart';
 import 'widgets/hold_to_confirm_button.dart';
+import 'widgets/task_unlock_picker_sheet.dart';
 import '../../../ui/components/clown_cam_gate_sheet.dart';
 
 class FocusDashboardScreen extends ConsumerStatefulWidget {
@@ -137,18 +140,36 @@ class _FocusDashboardScreenState extends ConsumerState<FocusDashboardScreen> {
                 },
               ),
               Gap.h12,
-              policies.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpace.s12),
-                    child: Text('Failed to load policies: $e'),
-                  ),
-                ),
-                data: (items) => _StartSessionCard(
-                  policies: items,
-                  onTestCelebration: kDebugMode ? _triggerWTest : null,
-                ),
+              Builder(
+                builder: (context) {
+                  final sessionActive = active.valueOrNull?.isActive == true;
+                  if (sessionActive) {
+                    return Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpace.s12),
+                        child: Text(
+                          'Session already running. End it to start a new one.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    );
+                  }
+
+                  return policies.when(
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpace.s12),
+                        child: Text('Failed to load policies: $e'),
+                      ),
+                    ),
+                    data: (items) => _StartSessionCard(
+                      policies: items,
+                      onTestCelebration: kDebugMode ? _triggerWTest : null,
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -159,10 +180,7 @@ class _FocusDashboardScreenState extends ConsumerState<FocusDashboardScreen> {
               particleCount: 90,
               emitDuration: const Duration(seconds: 3),
               fallDuration: const Duration(milliseconds: 1800),
-              onSpawn: () {
-                final sound = ref.read(soundServiceProvider);
-                unawaited(sound.playRapid(AppSfx.wDrop));
-              },
+              onSpawn: null,
               onCompleted: () {
                 if (!mounted) return;
                 setState(() => _showW = false);
@@ -224,6 +242,11 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
     final now = ref.watch(nowTickerProvider).valueOrNull ?? DateTime.now();
     final remaining = session.plannedEndAt.difference(now);
     final mmss = _formatRemaining(remaining);
+    final totalDuration = session.plannedEndAt.difference(session.startedAt);
+    final elapsed = now.difference(session.startedAt);
+    final progress = totalDuration.inSeconds > 0
+        ? (elapsed.inSeconds / totalDuration.inSeconds).clamp(0.0, 1.0)
+        : 0.0;
 
     final policies =
         ref.watch(focusPolicyListProvider).valueOrNull ?? const <FocusPolicy>[];
@@ -235,9 +258,35 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
       }
     }
     final friction = policy?.friction ?? FocusFrictionSettings.defaults;
+    final effectiveFriction = session.friction ?? friction;
     final gate = ref.watch(dumbPhoneSessionGateControllerProvider).valueOrNull;
     final requireCardToEndEarly = gate?.requireCardToEndEarly == true;
     final requireSelfieToEndEarly = gate?.requireSelfieToEndEarly == true;
+    final unlockConfig =
+        ref.watch(activeSessionTaskUnlockControllerProvider).valueOrNull;
+    final unlockRequiredCount = unlockConfig?.requiredCount ?? 0;
+    final unlockTaskIds = unlockConfig?.requiredTaskIds ?? const <String>[];
+    final unlockYmd = unlockConfig?.ymd;
+
+    int unlockDone = 0;
+    int unlockMissing = 0;
+    if (unlockRequiredCount > 0 && unlockYmd != null && unlockYmd.isNotEmpty) {
+      final today = ref.watch(todayControllerProvider(unlockYmd));
+      final byId = <String, TodayTask>{for (final t in today.tasks) t.id: t};
+      for (final id in unlockTaskIds) {
+        final t = byId[id];
+        if (t == null) {
+          unlockMissing++;
+        } else if (t.completed) {
+          unlockDone++;
+        }
+      }
+    }
+    final unlockSatisfied = unlockRequiredCount <= 0
+        ? true
+        : (unlockDone >= unlockRequiredCount &&
+            unlockMissing == 0 &&
+            unlockTaskIds.length == unlockRequiredCount);
 
     // Ensure we auto-complete once the timer elapses.
     // IMPORTANT: Do not modify providers during build; defer to after the frame.
@@ -245,12 +294,13 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
         _didScheduleReconcileForSessionId != session.id) {
       _didScheduleReconcileForSessionId = session.id;
       final activeController = ref.read(activeFocusSessionProvider.notifier);
-      unawaited(ref.read(soundServiceProvider).play(AppSfx.focusEnd));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         // Avoid using `ref` in an async/post-frame callback; the widget might be disposed.
         activeController.reconcileIfExpired();
       });
     }
+
+    final scheme = Theme.of(context).colorScheme;
 
     return Card(
       child: Padding(
@@ -258,8 +308,18 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Session active',
-                style: Theme.of(context).textTheme.titleMedium),
+            Row(
+              children: [
+                Icon(Icons.timer, color: scheme.onSurfaceVariant),
+                Gap.w12,
+                Expanded(
+                  child: Text(
+                    'Focus Session Active',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
             if (widget.isEnding) ...[
               const SizedBox(height: 8),
               const LinearProgressIndicator(),
@@ -279,21 +339,112 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
                     ),
               ),
             ],
-            const SizedBox(height: 6),
-            Text('Ends at: ${DateFormat.Hm().format(session.plannedEndAt)}'),
-            Text('Remaining: $mmss'),
+            Gap.h12,
+            // Large prominent timer display
+            Center(
+              child: Text(
+                mmss,
+                style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+              ),
+            ),
+            Gap.h8,
+            Center(
+              child: Text(
+                'remaining',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+              ),
+            ),
+            Gap.h12,
+            LinearProgressIndicator(value: progress),
+            Gap.h8,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Started ${DateFormat.Hm().format(session.startedAt)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                Text(
+                  'Ends ${DateFormat.Hm().format(session.plannedEndAt)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
+            if (unlockRequiredCount > 0 && unlockYmd != null) ...[
+              _UnlockToEndEarlySection(
+                ymd: unlockYmd,
+                requiredCount: unlockRequiredCount,
+                requiredTaskIds: unlockTaskIds,
+                doneCount: unlockDone,
+                missingCount: unlockMissing,
+                onEdit: () async {
+                  final result = await TaskUnlockPickerSheet.show(
+                    context,
+                    ymd: unlockYmd,
+                    requiredCount: unlockRequiredCount,
+                    initialSelectedTaskIds: unlockTaskIds,
+                  );
+                  if (result == null) return;
+                  try {
+                    await ref
+                        .read(activeSessionTaskUnlockControllerProvider.notifier)
+                        .updateRequiredTaskIds(requiredTaskIds: result.taskIds);
+                  } catch (e) {
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to update unlock tasks: $e')),
+                    );
+                  }
+                },
+                onGoToToday: () => context.go('/today?ymd=$unlockYmd'),
+                onToggleTask: (taskId) async {
+                  final todayController =
+                      ref.read(todayControllerProvider(unlockYmd).notifier);
+                  final beforeDay = ref.read(todayControllerProvider(unlockYmd));
+                  bool wasCompleted = false;
+                  for (final t in beforeDay.tasks) {
+                    if (t.id == taskId) {
+                      wasCompleted = t.completed;
+                      break;
+                    }
+                  }
+
+                  await todayController.toggleTaskCompleted(taskId);
+
+                  final afterDay = ref.read(todayControllerProvider(unlockYmd));
+                  bool isCompleted = false;
+                  for (final t in afterDay.tasks) {
+                    if (t.id == taskId) {
+                      isCompleted = t.completed;
+                      break;
+                    }
+                  }
+
+                  if (!wasCompleted && isCompleted) {
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+            ],
             HoldToConfirmButton(
-              holdDuration: Duration(seconds: friction.holdToUnlockSeconds),
+              holdDuration: Duration(seconds: effectiveFriction.holdToUnlockSeconds),
               label: requireCardToEndEarly && requireSelfieToEndEarly
                   ? 'Hold, scan card, then clown cam to end'
                   : requireCardToEndEarly
                       ? 'Hold, then scan card to end'
                       : requireSelfieToEndEarly
                           ? 'Hold, then clown cam to end'
-                          : 'Hold to end session early',
+                          : unlockSatisfied
+                              ? 'Hold to end session early'
+                              : 'Complete unlock tasks to end early',
               icon: Icons.stop_circle,
-              enabled: !widget.isEnding,
+              enabled: !widget.isEnding && unlockSatisfied,
               busyLabel: 'Ending…',
               onConfirmed: () async {
                 // Capture the controller before any await; `ref` can't be used after dispose.
@@ -307,9 +458,9 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
 
                 // Apply the configured "unlock delay" as a baseline.
                 // (Android also enforces this delay on the native blocking screen.)
-                if (friction.unlockDelaySeconds > 0) {
+                if (effectiveFriction.unlockDelaySeconds > 0) {
                   await Future<void>.delayed(
-                    Duration(seconds: friction.unlockDelaySeconds),
+                    Duration(seconds: effectiveFriction.unlockDelaySeconds),
                   );
                 }
 
@@ -366,21 +517,20 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
                 final stillActive =
                     ref.read(activeFocusSessionProvider).valueOrNull?.isActive ==
                         true;
-                if (!stillActive) {
-                  unawaited(
-                      ref.read(soundServiceProvider).play(AppSfx.focusEnd));
-                }
+                if (!stillActive) {}
               },
             ),
             const SizedBox(height: 8),
             Text(
               requireCardToEndEarly && requireSelfieToEndEarly
-                  ? 'To end early: open Dumb Phone Mode → hold for ${friction.holdToUnlockSeconds}s, wait ${friction.unlockDelaySeconds}s, scan your paired card, then do the clown cam check.'
+                  ? 'To end early: open Dumb Phone Mode → hold for ${effectiveFriction.holdToUnlockSeconds}s, wait ${effectiveFriction.unlockDelaySeconds}s, scan your paired card, then do the clown cam check.'
                   : requireCardToEndEarly
-                      ? 'To end early: open Dumb Phone Mode → hold for ${friction.holdToUnlockSeconds}s, wait ${friction.unlockDelaySeconds}s, then scan your paired card.'
+                      ? 'To end early: open Dumb Phone Mode → hold for ${effectiveFriction.holdToUnlockSeconds}s, wait ${effectiveFriction.unlockDelaySeconds}s, then scan your paired card.'
                       : requireSelfieToEndEarly
-                          ? 'To end early: open Dumb Phone Mode → hold for ${friction.holdToUnlockSeconds}s, wait ${friction.unlockDelaySeconds}s, then do the clown cam check.'
-                          : 'To end early: open Dumb Phone Mode → hold for ${friction.holdToUnlockSeconds}s, then wait ${friction.unlockDelaySeconds}s.',
+                          ? 'To end early: open Dumb Phone Mode → hold for ${effectiveFriction.holdToUnlockSeconds}s, wait ${effectiveFriction.unlockDelaySeconds}s, then do the clown cam check.'
+                          : unlockRequiredCount > 0
+                              ? 'To end early: complete your unlock tasks, then hold for ${effectiveFriction.holdToUnlockSeconds}s and wait ${effectiveFriction.unlockDelaySeconds}s.'
+                              : 'To end early: open Dumb Phone Mode → hold for ${effectiveFriction.holdToUnlockSeconds}s, then wait ${effectiveFriction.unlockDelaySeconds}s.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
@@ -415,6 +565,7 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
   double _minutes = 25;
   _StartSessionMode _mode = _StartSessionMode.duration;
   TimeOfDay? _endTime;
+  _SessionPreset _preset = _SessionPreset.normal;
 
   @override
   void initState() {
@@ -455,6 +606,9 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
         }
       }
     }
+
+    final presetFriction = _SessionPreset.frictionFor(_preset);
+    final requiredUnlockCount = _SessionPreset.requiredUnlockTaskCount(_preset);
 
     return Card(
       child: Padding(
@@ -558,6 +712,28 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                 ],
             ],
             const SizedBox(height: 12),
+            Text('Preset', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            SegmentedButton<_SessionPreset>(
+              segments: const [
+                ButtonSegment(value: _SessionPreset.light, label: Text('Light')),
+                ButtonSegment(value: _SessionPreset.normal, label: Text('Normal')),
+                ButtonSegment(value: _SessionPreset.extreme, label: Text('Extreme')),
+              ],
+              selected: {_preset},
+              onSelectionChanged: (set) {
+                if (set.isEmpty) return;
+                setState(() => _preset = set.first);
+              },
+            ),
+            const SizedBox(height: 8),
+            Text(
+              requiredUnlockCount <= 0
+                  ? 'Early-exit requirement: None'
+                  : 'Early-exit requirement: Complete $requiredUnlockCount tasks to unlock',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
@@ -570,6 +746,8 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                                 final now = DateTime.now();
                                 final policy = selected;
                                 if (policy == null) return;
+                                final ymd =
+                                    DateFormat('yyyy-MM-dd').format(now);
 
                                 final computedEndsAt =
                                     _mode == _StartSessionMode.duration
@@ -587,12 +765,27 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                                   policy: policy,
                                   endsAt: computedEndsAt,
                                   duration: computedDuration,
+                                  friction: presetFriction,
+                                  requiredUnlockTaskCount: requiredUnlockCount,
                                   requireCardToEndEarly: requireCardToEndEarly,
                                   requireSelfieToEndEarly:
                                       requireSelfieToEndEarly,
                                 );
                                 if (!ok) return;
                                 if (!context.mounted) return;
+
+                                List<String> unlockTaskIds = const [];
+                                if (requiredUnlockCount > 0) {
+                                  final picked =
+                                      await TaskUnlockPickerSheet.show(
+                                    context,
+                                    ymd: ymd,
+                                    requiredCount: requiredUnlockCount,
+                                    initialSelectedTaskIds: const [],
+                                  );
+                                  if (picked == null) return;
+                                  unlockTaskIds = picked.taskIds;
+                                }
 
                                 final gateController = ref.read(
                                   dumbPhoneSessionGateControllerProvider.notifier,
@@ -607,17 +800,33 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                                   endsAt: _mode == _StartSessionMode.endAt
                                       ? computedEndsAt
                                       : null,
+                                  frictionOverride: presetFriction,
                                 );
                                 if (!started) return;
 
+                                final session = ref
+                                    .read(activeFocusSessionProvider)
+                                    .valueOrNull;
+                                if (session != null && session.isActive) {
+                                  final unlockController = ref.read(
+                                    activeSessionTaskUnlockControllerProvider
+                                        .notifier,
+                                  );
+                                  if (requiredUnlockCount > 0) {
+                                    await unlockController.safeSetForActiveSession(
+                                      context: context,
+                                      session: session,
+                                      ymd: ymd,
+                                      requiredCount: requiredUnlockCount,
+                                      requiredTaskIds: unlockTaskIds,
+                                    );
+                                  } else {
+                                    // Preset says none: ensure we clear any stale config.
+                                    await unlockController.clear();
+                                  }
+                                }
+
                                 if (!context.mounted) return;
-                                unawaited(
-                                  ref
-                                      .read(soundServiceProvider)
-                                      .play(AppSfx.focusStart),
-                                );
-                                final ymd = DateFormat('yyyy-MM-dd')
-                                    .format(DateTime.now());
                                 await ref
                                     .read(todayControllerProvider(ymd).notifier)
                                     .enableFocusModeAndSelectDefaultTask();
@@ -628,7 +837,7 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                                       .queuePendingAutoStart25m();
                                 }
                                 if (!context.mounted) return;
-                                context.go('/today');
+                                context.go('/today?ymd=$ymd');
                               },
                     icon: const Icon(Icons.play_arrow),
                     label: Text(
@@ -660,13 +869,14 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
     required FocusPolicy policy,
     required DateTime endsAt,
     required Duration duration,
+    required FocusFrictionSettings friction,
+    required int requiredUnlockTaskCount,
     required bool requireCardToEndEarly,
     required bool requireSelfieToEndEarly,
   }) async {
     final isIOS = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
     final isAndroid =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-    final friction = policy.friction;
     final allowedCount = policy.allowedApps.length;
 
     final platformWhatHappens = isAndroid
@@ -717,6 +927,12 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                   Text(
                     'To end early: open Dumb Phone Mode → “Hold to end session early” (${friction.holdToUnlockSeconds}s hold, then ${friction.unlockDelaySeconds}s delay).',
                   ),
+                  if (requiredUnlockTaskCount > 0) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Because “Complete tasks to unlock” is enabled, you must complete $requiredUnlockTaskCount selected tasks before the early-exit hold will work.',
+                    ),
+                  ],
                   if (requireCardToEndEarly) ...[
                     const SizedBox(height: 6),
                     const Text(
@@ -726,7 +942,7 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                   if (requireSelfieToEndEarly) ...[
                     const SizedBox(height: 6),
                     const Text(
-                      'Because “Require clown camera check to end early” is enabled, you’ll also need to open the selfie camera with the overlay (no photo is taken).',
+                      'Because “Require clown camera check to end early” is enabled, you’ll also need to open the selfie camera with the overlay (a photo is saved on your device).',
                     ),
                   ],
                   if (isAndroid) ...[
@@ -759,3 +975,158 @@ enum _StartSessionMode {
   duration,
   endAt,
 }
+
+enum _SessionPreset {
+  light,
+  normal,
+  extreme;
+
+  static FocusFrictionSettings frictionFor(_SessionPreset preset) {
+    // v1 sensible defaults (independent of policy): consistent mental model.
+    // Light: low friction, still not instant.
+    // Normal: current defaults.
+    // Extreme: higher friction and (optionally) no emergency exceptions.
+    return switch (preset) {
+      _SessionPreset.light => const FocusFrictionSettings(
+          holdToUnlockSeconds: 2,
+          unlockDelaySeconds: 5,
+          emergencyUnlockMinutes: 3,
+          maxEmergencyUnlocksPerSession: 1,
+        ),
+      _SessionPreset.normal => FocusFrictionSettings.defaults,
+      _SessionPreset.extreme => const FocusFrictionSettings(
+          holdToUnlockSeconds: 5,
+          unlockDelaySeconds: 20,
+          emergencyUnlockMinutes: 3,
+          maxEmergencyUnlocksPerSession: 0,
+        ),
+    };
+  }
+
+  static int requiredUnlockTaskCount(_SessionPreset preset) {
+    return switch (preset) {
+      _SessionPreset.light => 0,
+      _SessionPreset.normal => 2,
+      _SessionPreset.extreme => 3,
+    };
+  }
+}
+
+class _UnlockToEndEarlySection extends ConsumerWidget {
+  const _UnlockToEndEarlySection({
+    required this.ymd,
+    required this.requiredCount,
+    required this.requiredTaskIds,
+    required this.doneCount,
+    required this.missingCount,
+    required this.onEdit,
+    required this.onGoToToday,
+    required this.onToggleTask,
+  });
+
+  final String ymd;
+  final int requiredCount;
+  final List<String> requiredTaskIds;
+  final int doneCount;
+  final int missingCount;
+  final VoidCallback onEdit;
+  final VoidCallback onGoToToday;
+  final Future<void> Function(String taskId) onToggleTask;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final today = ref.watch(todayControllerProvider(ymd));
+    final byId = <String, TodayTask>{for (final t in today.tasks) t.id: t};
+
+    final remaining = (requiredCount - doneCount).clamp(0, requiredCount);
+    final blocked = remaining > 0 || missingCount > 0 || requiredTaskIds.length != requiredCount;
+
+    return Card(
+      color: blocked
+          ? Theme.of(context).colorScheme.surfaceContainerHighest
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.s12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Unlock to end early',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                TextButton(
+                  onPressed: onEdit,
+                  child: const Text('Edit'),
+                ),
+              ],
+            ),
+            Text(
+              '$doneCount/$requiredCount done',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              'Tap a task to mark it complete',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            if (missingCount > 0) ...[
+              Gap.h8,
+              Text(
+                '$missingCount missing task${missingCount == 1 ? '' : 's'} (deleted or moved). Replace them to unlock.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+            Gap.h8,
+            for (final id in requiredTaskIds) ...[
+              Builder(
+                builder: (context) {
+                  final t = byId[id];
+                  if (t == null) {
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.error_outline),
+                      title: const Text('Missing task'),
+                      subtitle: Text('ID: $id'),
+                    );
+                  }
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      t.completed
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked,
+                    ),
+                    title: Text(t.title),
+                    subtitle: Text(
+                      t.type == TodayTaskType.mustWin ? 'Must‑Win' : 'Nice‑to‑Do',
+                    ),
+                    onTap: () => onToggleTask(t.id),
+                  );
+                },
+              ),
+            ],
+            if (blocked) ...[
+              Gap.h12,
+              FilledButton.icon(
+                onPressed: onGoToToday,
+                icon: const Icon(Icons.today),
+                label: const Text('Go to Today to complete tasks'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+

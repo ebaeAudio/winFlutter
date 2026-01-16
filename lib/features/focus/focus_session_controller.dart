@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/focus/focus_policy_repository.dart';
 import '../../data/focus/focus_session_repository.dart';
+import '../../domain/focus/focus_friction.dart';
 import '../../domain/focus/focus_session.dart';
 import '../../platform/restriction_engine/restriction_engine.dart';
 import 'focus_providers.dart';
@@ -46,6 +47,7 @@ class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
     required String policyId,
     Duration? duration,
     DateTime? endsAt,
+    FocusFrictionSettings? frictionOverride,
   }) async {
     final hasDuration = duration != null;
     final hasEndsAt = endsAt != null;
@@ -66,6 +68,7 @@ class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
         throw StateError('Policy not found');
       }
 
+      final effectiveFriction = frictionOverride ?? policy.friction;
       final now = DateTime.now();
       final plannedEndAt = endsAt ?? now.add(duration!);
       if (!plannedEndAt.isAfter(now)) {
@@ -78,13 +81,14 @@ class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
         startedAt: now,
         plannedEndAt: plannedEndAt,
         status: FocusSessionStatus.active,
+        friction: effectiveFriction,
         emergencyUnlocksUsed: 0,
       );
 
       await _engine.startSession(
         endsAt: session.plannedEndAt,
         allowedApps: policy.allowedApps,
-        friction: policy.friction,
+        friction: effectiveFriction,
       );
 
       await _sessions.saveActiveSession(session);
@@ -118,6 +122,7 @@ class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
         startedAt: active.startedAt,
         plannedEndAt: active.plannedEndAt,
         status: FocusSessionStatus.ended,
+        friction: active.friction,
         endedAt: DateTime.now(),
         endReason: reason,
         emergencyUnlocksUsed: active.emergencyUnlocksUsed,

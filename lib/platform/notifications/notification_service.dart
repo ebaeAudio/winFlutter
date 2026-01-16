@@ -102,7 +102,7 @@ class NotificationService {
       final ios = _plugin.resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin>();
       final granted =
-          await ios?.requestPermissions(alert: true, badge: true, sound: true);
+          await ios?.requestPermissions(alert: true, badge: true, sound: false);
       return granted ?? false;
     }
 
@@ -112,7 +112,7 @@ class NotificationService {
       final granted = await macos?.requestPermissions(
         alert: true,
         badge: true,
-        sound: true,
+        sound: false,
       );
       return granted ?? false;
     }
@@ -163,9 +163,10 @@ class NotificationService {
           channelDescription: _channelDescription,
           importance: Importance.high,
           priority: Priority.high,
+            playSound: false,
         ),
-        iOS: DarwinNotificationDetails(),
-        macOS: DarwinNotificationDetails(),
+          iOS: DarwinNotificationDetails(presentSound: false),
+          macOS: DarwinNotificationDetails(presentSound: false),
       ),
       payload: route,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,

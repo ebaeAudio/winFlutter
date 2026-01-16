@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/user_settings.dart';
 import '../../../ui/app_scaffold.dart';
 import '../../../ui/spacing.dart';
 import '../restriction_permissions_provider.dart';
-import 'focus_onboarding_screen.dart';
+import 'dumb_phone_onboarding_flow.dart';
 import 'focus_dashboard_screen.dart';
 import 'widgets/pomodoro_timer_card.dart';
 
@@ -14,6 +15,8 @@ class FocusEntryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final perms = ref.watch(restrictionPermissionsProvider);
+    final userSettings = ref.watch(userSettingsControllerProvider);
+    final onboardingComplete = userSettings.dumbPhoneOnboardingComplete;
 
     return perms.when(
       loading: () => const AppScaffold(
@@ -50,8 +53,11 @@ class FocusEntryScreen extends ConsumerWidget {
           );
         }
 
-        if (p.needsOnboarding || !p.isAuthorized) {
-          return FocusOnboardingScreen(permissions: p);
+        // Show the new guided onboarding flow if:
+        // 1. User hasn't completed onboarding yet, OR
+        // 2. Permissions need to be granted
+        if (!onboardingComplete || p.needsOnboarding || !p.isAuthorized) {
+          return DumbPhoneOnboardingFlow(initialPermissions: p);
         }
 
         return const FocusDashboardScreen();

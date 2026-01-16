@@ -36,6 +36,17 @@ class FocusPolicyListController extends AsyncNotifier<List<FocusPolicy>> {
     return policy;
   }
 
+  /// Creates a default policy if none exists. Used during onboarding.
+  ///
+  /// Returns true if a policy was created, false if one already existed.
+  Future<bool> createDefaultPolicy() async {
+    final existing = state.valueOrNull ?? await _repo.listPolicies();
+    if (existing.isNotEmpty) return false;
+
+    await createDefault();
+    return true;
+  }
+
   Future<void> upsert(FocusPolicy policy) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
