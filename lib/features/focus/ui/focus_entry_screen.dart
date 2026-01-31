@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/user_settings.dart';
@@ -39,6 +40,10 @@ class FocusEntryScreen extends ConsumerWidget {
           return AppScaffold(
             title: 'Dumb Phone Mode',
             children: [
+              if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) ...[
+                const RemoteStartOnIPhoneCard(),
+                Gap.h12,
+              ],
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(AppSpace.s12),
@@ -53,10 +58,9 @@ class FocusEntryScreen extends ConsumerWidget {
           );
         }
 
-        // Show the new guided onboarding flow if:
-        // 1. User hasn't completed onboarding yet, OR
-        // 2. Permissions need to be granted
-        if (!onboardingComplete || p.needsOnboarding || !p.isAuthorized) {
+        // Show the new guided onboarding flow only if user hasn't completed it.
+        // Once complete, go straight to dashboard (it handles permission state).
+        if (!onboardingComplete) {
           return DumbPhoneOnboardingFlow(initialPermissions: p);
         }
 

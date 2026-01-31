@@ -53,10 +53,12 @@ class DashboardLayoutController extends StateNotifier<List<DashboardSectionId>> 
     final ids = <DashboardSectionId>[];
 
     final seen = <DashboardSectionId>{};
+    final hidden = DashboardSectionId.hiddenSectionIds;
     for (final raw in stored) {
       final id = DashboardSectionId.tryParse(raw);
       if (id == null) continue;
       if (id == DashboardSectionId.niceToDo) continue;
+      if (hidden.contains(id)) continue;
       if (seen.contains(id)) continue;
       seen.add(id);
       ids.add(id);
@@ -64,6 +66,7 @@ class DashboardLayoutController extends StateNotifier<List<DashboardSectionId>> 
 
     // Append any new sections (not present in stored layout) in default order.
     for (final id in DashboardSectionId.defaultOrder) {
+      if (hidden.contains(id)) continue;
       if (seen.contains(id)) continue;
       ids.add(id);
       seen.add(id);

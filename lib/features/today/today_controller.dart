@@ -9,14 +9,15 @@ import '../../app/theme.dart';
 import '../../data/habits/habits_repository.dart';
 import '../../data/habits/habits_providers.dart';
 import '../../data/linear/linear_issue_repository.dart';
-import '../../data/linear/linear_models.dart';
 import '../../data/tasks/task.dart' as data;
 import '../../data/tasks/task_details_providers.dart';
 import '../../data/tasks/task_details_repository.dart';
 import '../../data/tasks/tasks_providers.dart';
 import '../../data/tasks/tasks_repository.dart';
 import '../../domain/focus/active_timebox.dart';
+import 'linear_task_helper.dart';
 import 'today_models.dart';
+import 'morning_wizard/morning_wizard_data.dart';
 
 final todayControllerProvider =
     StateNotifierProvider.family<TodayController, TodayDayData, String>(
@@ -112,6 +113,108 @@ class TodayController extends StateNotifier<TodayDayData> {
     return _formatYmd(day.subtract(const Duration(days: 1)));
   }
 
+  /// Returns yesterday recap context for the Morning Launch Wizard.
+  ///
+  /// Best-effort and non-throwing. If yesterday can't be loaded, returns an
+  /// "empty" recap with 0% and no tasks.
+  Future<YesterdayRecap> getYesterdayRecap() async {
+    final yYmd = _yesterdayYmd();
+    if (yYmd == null || yYmd.trim().isEmpty) {
+      return const YesterdayRecap(
+        percent: 0,
+        label: 'Fresh start',
+        mustWinTotal: 0,
+        mustWinDone: 0,
+        niceToDoTotal: 0,
+        niceToDoDone: 0,
+        habitsTotal: 0,
+        habitsDone: 0,
+        incompleteMustWins: [],
+      );
+    }
+
+    List<TodayTask> tasks = const [];
+    if (_isSupabaseMode) {
+      final repo = _tasksRepository;
+      if (repo != null) {
+        try {
+          final raw = await repo.listForDate(ymd: yYmd);
+          tasks = [for (final t in raw) _toTodayTask(t)];
+        } catch (_) {
+          tasks = const [];
+        }
+      }
+    } else {
+      try {
+        final raw = _prefs.getString(_keyForLocalDay(yYmd));
+        if (raw != null && raw.trim().isNotEmpty) {
+          tasks = TodayDayData.fromJsonString(raw, fallbackYmd: yYmd).tasks;
+        }
+      } catch (_) {
+        tasks = const [];
+      }
+    }
+
+    int mustWinTotal = 0;
+    int mustWinDone = 0;
+    int niceTotal = 0;
+    int niceDone = 0;
+    final incompleteMustWins = <TodayTask>[];
+
+    for (final t in tasks) {
+      if (t.isDeleted) continue;
+      if (t.type == TodayTaskType.mustWin) {
+        mustWinTotal++;
+        if (t.completed) {
+          mustWinDone++;
+        } else {
+          incompleteMustWins.add(t);
+        }
+      } else {
+        niceTotal++;
+        if (t.completed) niceDone++;
+      }
+    }
+
+    int habitsTotal = 0;
+    int habitsDone = 0;
+    try {
+      final habits = await _habitsRepository.listHabits();
+      habitsTotal = habits.length;
+      if (habitsTotal > 0) {
+        final completedIds =
+            await _habitsRepository.getCompletedHabitIds(ymd: yYmd);
+        for (final h in habits) {
+          if (completedIds.contains(h.id)) habitsDone++;
+        }
+      }
+    } catch (_) {
+      habitsTotal = 0;
+      habitsDone = 0;
+    }
+
+    final percent = computeScorePercent(
+      mustWinDone: mustWinDone,
+      mustWinTotal: mustWinTotal,
+      niceToDoDone: niceDone,
+      niceToDoTotal: niceTotal,
+      habitsDone: habitsDone,
+      habitsTotal: habitsTotal,
+    );
+
+    return YesterdayRecap(
+      percent: percent,
+      label: scoreLabelForPercent(percent),
+      mustWinTotal: mustWinTotal,
+      mustWinDone: mustWinDone,
+      niceToDoTotal: niceTotal,
+      niceToDoDone: niceDone,
+      habitsTotal: habitsTotal,
+      habitsDone: habitsDone,
+      incompleteMustWins: incompleteMustWins,
+    );
+  }
+
   /// Returns yesterday's incomplete tasks (best-effort, non-throwing).
   ///
   /// - Supabase mode: queries yesterday’s tasks from DB.
@@ -138,6 +241,78 @@ class TodayController extends StateNotifier<TodayDayData> {
     if (raw == null || raw.trim().isEmpty) return const [];
     final yDay = TodayDayData.fromJsonString(raw, fallbackYmd: yYmd);
     return [for (final t in yDay.tasks) if (!t.completed) t];
+  }
+
+  /// Moves a selected set of yesterday tasks onto this controller’s day.
+  ///
+  /// Safety: if today already has tasks (in DB or local state), this is a no-op.
+  /// The provided [taskIds] should typically come from yesterday data.
+  Future<int> rolloverYesterdayTasksById(Set<String> taskIds) async {
+    if (taskIds.isEmpty) return 0;
+    final yYmd = _yesterdayYmd();
+    if (yYmd == null || yYmd.trim().isEmpty) return 0;
+
+    if (_isSupabaseMode) {
+      final repo = _tasksRepository;
+      if (repo == null) return 0;
+
+      // Safety check: don’t roll over if today already has tasks in DB.
+      try {
+        final todayExisting = await repo.listForDate(ymd: _ymd);
+        if (todayExisting.isNotEmpty) return 0;
+      } catch (_) {
+        // If we can't verify, fail safe (don’t move data).
+        return 0;
+      }
+
+      List<TodayTask> yesterday;
+      try {
+        final raw = await repo.listForDate(ymd: yYmd);
+        yesterday = [for (final t in raw) _toTodayTask(t)];
+      } catch (_) {
+        return 0;
+      }
+
+      final moving = <TodayTask>[
+        for (final t in yesterday)
+          if (taskIds.contains(t.id) && !t.completed) t,
+      ];
+      if (moving.isEmpty) return 0;
+
+      await Future.wait([
+        for (final t in moving) repo.update(id: t.id, ymd: _ymd),
+      ]);
+      await _loadTasksFromSupabase();
+      return moving.length;
+    }
+
+    // Local/demo mode.
+    if (state.tasks.isNotEmpty) return 0;
+
+    final rawYesterday = _prefs.getString(_keyForLocalDay(yYmd));
+    final yDay = (rawYesterday == null || rawYesterday.trim().isEmpty)
+        ? TodayDayData.empty(yYmd)
+        : TodayDayData.fromJsonString(rawYesterday, fallbackYmd: yYmd);
+
+    final moving = <TodayTask>[
+      for (final t in yDay.tasks)
+        if (taskIds.contains(t.id) && !t.completed) t,
+    ];
+    if (moving.isEmpty) return 0;
+
+    final remainingYesterday = yDay.copyWith(
+      tasks: [
+        for (final t in yDay.tasks)
+          if (!taskIds.contains(t.id) || t.completed) t,
+      ],
+    );
+    await _prefs.setString(
+        _keyForLocalDay(yYmd), remainingYesterday.toJsonString());
+
+    final nextToday = state.copyWith(tasks: [...state.tasks, ...moving]);
+    await _saveLocalDay(nextToday);
+    unawaited(_autoSelectFocusTaskIfNeeded());
+    return moving.length;
   }
 
   /// Moves yesterday’s incomplete tasks onto this controller’s day.
@@ -194,76 +369,21 @@ class TodayController extends StateNotifier<TodayDayData> {
     return moving.length;
   }
 
-  Future<void> _maybeSyncLinear({
+  Future<void> _syncLinearTask({
     required String taskId,
     bool? completed,
     bool? inProgress,
-  }) async {
-    final repo = _linearIssueRepository;
-    if (repo == null) return;
-
-    String notesText = '';
-    try {
-      if (_isSupabaseMode) {
-        final detailsRepo = _taskDetailsRepository;
-        if (detailsRepo == null) return;
-        final details = await detailsRepo.getDetails(taskId: taskId);
-        notesText = (details.notes ?? '').trim();
-      } else {
-        final match = state.tasks.where((t) => t.id == taskId).toList();
-        if (match.isEmpty) return;
-        final t = match.first;
-        notesText = (t.notes ?? t.details ?? '').trim();
-      }
-
-      final ref = LinearIssueRef.tryParseFromText(notesText);
-      if (ref == null) return;
-
-      final issue = await repo.getIssueByIdentifier(ref.identifier);
-      if (issue == null) {
-        await _recordLinearSyncStatus(
-          at: DateTime.now(),
-          error: 'Linear issue not found: ${ref.identifier}',
-        );
-        return;
-      }
-
-      String? desiredType;
-      if (inProgress == true) {
-        desiredType = 'started';
-      } else if (completed == true) {
-        desiredType = 'completed';
-      } else if (completed == false) {
-        // Best-effort revert: move away from completed back to started/unstarted.
-        desiredType = issue.findTeamStateByType('started') != null
-            ? 'started'
-            : (issue.findTeamStateByType('unstarted') != null
-                ? 'unstarted'
-                : null);
-      } else if (inProgress == false) {
-        // If user explicitly turns off in-progress, revert to unstarted if possible.
-        desiredType = issue.findTeamStateByType('unstarted') != null
-            ? 'unstarted'
-            : (issue.findTeamStateByType('backlog') != null ? 'backlog' : null);
-      }
-
-      if (desiredType == null || desiredType.trim().isEmpty) return;
-
-      final updated =
-          await repo.setIssueStateType(issue: issue, stateType: desiredType);
-      if (updated == null) {
-        await _recordLinearSyncStatus(
-          at: DateTime.now(),
-          error: 'No Linear state of type “$desiredType” for team.',
-        );
-        return;
-      }
-
-      await _recordLinearSyncStatus(at: DateTime.now(), error: null);
-    } catch (e) {
-      // Never block the core task toggle; just record the failure.
-      await _recordLinearSyncStatus(at: DateTime.now(), error: e.toString());
-    }
+  }) {
+    return maybeSyncLinearTask(
+      taskId: taskId,
+      isSupabaseMode: _isSupabaseMode,
+      localTasks: state.tasks,
+      taskDetailsRepository: _taskDetailsRepository,
+      linearIssueRepository: _linearIssueRepository,
+      recordLinearSyncStatus: _recordLinearSyncStatus,
+      completed: completed,
+      inProgress: inProgress,
+    );
   }
 
   TodayTask _toTodayTask(data.Task t) {
@@ -346,6 +466,15 @@ class TodayController extends StateNotifier<TodayDayData> {
     } catch (_) {
       // Keep existing state (empty tasks). UI surfaces this later with empty-state affordances.
     }
+  }
+
+  /// Refresh tasks from Supabase.
+  ///
+  /// Called by [taskRealtimeSyncProvider] when a task change is detected
+  /// from another device. This enables cross-device sync.
+  Future<void> refreshTasks() async {
+    if (!_isSupabaseMode) return;
+    await _loadTasksFromSupabase();
   }
 
   Future<void> _loadHabitsForDay() async {
@@ -444,34 +573,13 @@ class TodayController extends StateNotifier<TodayDayData> {
     // This is intentionally best-effort and must never block task creation.
     String resolvedTitle = trimmed;
     String? resolvedNotes;
-    final repo = _linearIssueRepository;
-    final linearRef = LinearIssueRef.tryParseFromText(trimmed);
-
-    // Even without an API key, we can still:
-    // - store the Linear URL in notes (so previews show up later once configured)
-    // - generate a nicer title using the URL slug
-    final linearUrl = _extractLinearUrl(trimmed);
-    if (linearRef != null && linearUrl != null) {
-      final fallbackTitle = _tryBuildLinearTitleFromUrl(linearUrl);
-      if (fallbackTitle != null && fallbackTitle.trim().isNotEmpty) {
-        resolvedTitle = fallbackTitle;
-      }
-      resolvedNotes = linearUrl;
-    }
-
-    if (repo != null && linearRef != null) {
-      try {
-        final issue = await repo.getIssueByIdentifier(linearRef.identifier);
-        if (issue != null) {
-          final issueTitle = issue.title.trim();
-          resolvedTitle = issueTitle.isEmpty
-              ? issue.identifier
-              : '${issue.identifier} — $issueTitle';
-          resolvedNotes = _formatLinearNotes(issue);
-        }
-      } catch (_) {
-        // Ignore: never block task creation on Linear.
-      }
+    final resolution = await resolveLinearTaskInput(
+      input: trimmed,
+      linearIssueRepository: _linearIssueRepository,
+    );
+    if (resolution != null) {
+      resolvedTitle = resolution.title;
+      resolvedNotes = resolution.notes;
     }
 
     if (_isSupabaseMode) {
@@ -520,128 +628,144 @@ class TodayController extends StateNotifier<TodayDayData> {
     return true;
   }
 
-  static String _formatLinearNotes(LinearIssue issue) {
-    final url = issue.url.trim();
-    final description = issue.description.trim();
-    if (url.isEmpty) return description;
-    if (description.isEmpty) return url;
-    return '$url\n\n$description';
-  }
+  /// Toggles task completion status with optimistic update.
+  ///
+  /// Returns `true` on success, `false` on failure (state is rolled back).
+  /// Ignores rapid double-clicks while an update is in-flight.
+  Future<bool> toggleTaskCompleted(String taskId) async {
+    // Ignore if already updating this task (prevents rapid double-click bugs)
+    if (state.isTaskUpdating(taskId)) return false;
 
-  static final RegExp _linearUrlRegex = RegExp(r'https?://linear\.app/\S+');
+    final current = state.tasks.where((t) => t.id == taskId).toList();
+    if (current.isEmpty) return false;
 
-  static String? _extractLinearUrl(String text) {
-    final match = _linearUrlRegex.firstMatch(text);
-    if (match == null) return null;
-    return text.substring(match.start, match.end);
-  }
+    final task = current.first;
+    final nextCompleted = !task.completed;
 
-  static String? _tryBuildLinearTitleFromUrl(String url) {
-    final uri = Uri.tryParse(url);
-    if (uri == null) return null;
-    if (uri.host.trim().toLowerCase() != 'linear.app') return null;
-
-    final segments = uri.pathSegments;
-    final issueIdx = segments.indexOf('issue');
-    if (issueIdx < 0 || issueIdx + 1 >= segments.length) return null;
-
-    final identifier = segments[issueIdx + 1].trim();
-    if (identifier.isEmpty) return null;
-
-    final slug =
-        (issueIdx + 2 < segments.length) ? segments[issueIdx + 2].trim() : '';
-    final prettySlug = slug.isEmpty
-        ? ''
-        : Uri.decodeComponent(slug).replaceAll('-', ' ').trim();
-
-    if (prettySlug.isEmpty) return identifier;
-    return '$identifier — $prettySlug';
-  }
-
-  Future<void> toggleTaskCompleted(String taskId) async {
-    if (_isSupabaseMode) {
-      final current = state.tasks.where((t) => t.id == taskId).toList();
-      if (current.isEmpty) return;
-      final nextCompleted = !current.first.completed;
-      final updated = await _tasksRepository!.update(
-        id: taskId,
-        completed: nextCompleted,
-        inProgress: nextCompleted ? false : null,
-      );
-      final nextTasks = [
-        for (final t in state.tasks)
-          if (t.id == taskId) _toTodayTask(updated) else t,
-      ];
-      state = state.copyWith(tasks: nextTasks);
-      unawaited(_maybeSyncLinear(taskId: taskId, completed: nextCompleted));
-      return;
-    }
-
-    final nextTasks = [
+    // Mark as updating + optimistic update
+    final optimisticTasks = [
       for (final t in state.tasks)
         if (t.id == taskId)
           t.copyWith(
-            completed: !t.completed,
-            inProgress: (!t.completed) ? false : null,
+            completed: nextCompleted,
+            inProgress: nextCompleted ? false : null,
           )
         else
-          t
+          t,
     ];
-    await _saveLocalDay(state.copyWith(tasks: nextTasks));
-    // Local mode can sync based on updated state tasks (notes stored locally).
-    final nextCompleted = nextTasks
-        .where((t) => t.id == taskId)
-        .map((t) => t.completed)
-        .firstOrNull;
-    if (nextCompleted != null) {
-      unawaited(_maybeSyncLinear(taskId: taskId, completed: nextCompleted));
+    final previousState = state;
+    state = state.copyWith(
+      tasks: optimisticTasks,
+      updatingTaskIds: {...state.updatingTaskIds, taskId},
+    );
+
+    try {
+      if (_isSupabaseMode) {
+        final updated = await _tasksRepository!.update(
+          id: taskId,
+          completed: nextCompleted,
+          inProgress: nextCompleted ? false : null,
+        );
+        // Reconcile with server response (in case server modified other fields)
+        final reconciledTasks = [
+          for (final t in state.tasks)
+            if (t.id == taskId) _toTodayTask(updated) else t,
+        ];
+        state = state.copyWith(
+          tasks: reconciledTasks,
+          updatingTaskIds: {...state.updatingTaskIds}..remove(taskId),
+        );
+        unawaited(_syncLinearTask(taskId: taskId, completed: nextCompleted));
+        return true;
+      }
+
+      // Local mode: persist to storage
+      await _saveLocalDay(state.copyWith(
+        updatingTaskIds: {...state.updatingTaskIds}..remove(taskId),
+      ));
+      state = state.copyWith(
+        updatingTaskIds: {...state.updatingTaskIds}..remove(taskId),
+      );
+      unawaited(_syncLinearTask(taskId: taskId, completed: nextCompleted));
+      return true;
+    } catch (_) {
+      // Rollback on failure and clear updating flag
+      state = previousState;
+      return false;
     }
   }
 
-  Future<void> setTaskCompleted(String taskId, bool completed) async {
-    if (_isSupabaseMode) {
-      final updated = await _tasksRepository!.update(
-        id: taskId,
-        completed: completed,
-        inProgress: completed ? false : null,
-      );
-      final nextTasks = [
-        for (final t in state.tasks)
-          if (t.id == taskId) _toTodayTask(updated) else t,
-      ];
-      state = state.copyWith(tasks: nextTasks);
-      unawaited(_maybeSyncLinear(taskId: taskId, completed: completed));
-      return;
-    }
+  /// Sets task completion status with optimistic update.
+  ///
+  /// Returns `true` on success, `false` on failure (state is rolled back).
+  /// Ignores rapid double-clicks while an update is in-flight.
+  Future<bool> setTaskCompleted(String taskId, bool completed) async {
+    // Ignore if already updating this task (prevents rapid double-click bugs)
+    if (state.isTaskUpdating(taskId)) return false;
 
-    final nextTasks = [
+    // Mark as updating + optimistic update
+    final optimisticTasks = [
       for (final t in state.tasks)
         if (t.id == taskId)
-          t.copyWith(completed: completed, inProgress: completed ? false : null)
+          t.copyWith(
+            completed: completed,
+            inProgress: completed ? false : null,
+          )
         else
-          t
+          t,
     ];
-    await _saveLocalDay(state.copyWith(tasks: nextTasks));
-    unawaited(_maybeSyncLinear(taskId: taskId, completed: completed));
+    final previousState = state;
+    state = state.copyWith(
+      tasks: optimisticTasks,
+      updatingTaskIds: {...state.updatingTaskIds, taskId},
+    );
+
+    try {
+      if (_isSupabaseMode) {
+        final updated = await _tasksRepository!.update(
+          id: taskId,
+          completed: completed,
+          inProgress: completed ? false : null,
+        );
+        // Reconcile with server response
+        final reconciledTasks = [
+          for (final t in state.tasks)
+            if (t.id == taskId) _toTodayTask(updated) else t,
+        ];
+        state = state.copyWith(
+          tasks: reconciledTasks,
+          updatingTaskIds: {...state.updatingTaskIds}..remove(taskId),
+        );
+        unawaited(_syncLinearTask(taskId: taskId, completed: completed));
+        return true;
+      }
+
+      // Local mode: persist to storage
+      await _saveLocalDay(state.copyWith(
+        updatingTaskIds: {...state.updatingTaskIds}..remove(taskId),
+      ));
+      state = state.copyWith(
+        updatingTaskIds: {...state.updatingTaskIds}..remove(taskId),
+      );
+      unawaited(_syncLinearTask(taskId: taskId, completed: completed));
+      return true;
+    } catch (_) {
+      // Rollback on failure and clear updating flag
+      state = previousState;
+      return false;
+    }
   }
 
-  Future<void> setTaskInProgress(String taskId, bool inProgress) async {
-    if (_isSupabaseMode) {
-      final updated = await _tasksRepository!.update(
-        id: taskId,
-        inProgress: inProgress,
-        completed: inProgress ? false : null,
-      );
-      final nextTasks = [
-        for (final t in state.tasks)
-          if (t.id == taskId) _toTodayTask(updated) else t,
-      ];
-      state = state.copyWith(tasks: nextTasks);
-      unawaited(_maybeSyncLinear(taskId: taskId, inProgress: inProgress));
-      return;
-    }
+  /// Sets task in-progress status with optimistic update.
+  ///
+  /// Returns `true` on success, `false` on failure (state is rolled back).
+  /// Ignores rapid double-clicks while an update is in-flight.
+  Future<bool> setTaskInProgress(String taskId, bool inProgress) async {
+    // Ignore if already updating this task (prevents rapid double-click bugs)
+    if (state.isTaskUpdating(taskId)) return false;
 
-    final nextTasks = [
+    // Mark as updating + optimistic update
+    final optimisticTasks = [
       for (final t in state.tasks)
         if (t.id == taskId)
           t.copyWith(
@@ -651,8 +775,46 @@ class TodayController extends StateNotifier<TodayDayData> {
         else
           t,
     ];
-    await _saveLocalDay(state.copyWith(tasks: nextTasks));
-    unawaited(_maybeSyncLinear(taskId: taskId, inProgress: inProgress));
+    final previousState = state;
+    state = state.copyWith(
+      tasks: optimisticTasks,
+      updatingTaskIds: {...state.updatingTaskIds, taskId},
+    );
+
+    try {
+      if (_isSupabaseMode) {
+        final updated = await _tasksRepository!.update(
+          id: taskId,
+          inProgress: inProgress,
+          completed: inProgress ? false : null,
+        );
+        // Reconcile with server response
+        final reconciledTasks = [
+          for (final t in state.tasks)
+            if (t.id == taskId) _toTodayTask(updated) else t,
+        ];
+        state = state.copyWith(
+          tasks: reconciledTasks,
+          updatingTaskIds: {...state.updatingTaskIds}..remove(taskId),
+        );
+        unawaited(_syncLinearTask(taskId: taskId, inProgress: inProgress));
+        return true;
+      }
+
+      // Local mode: persist to storage
+      await _saveLocalDay(state.copyWith(
+        updatingTaskIds: {...state.updatingTaskIds}..remove(taskId),
+      ));
+      state = state.copyWith(
+        updatingTaskIds: {...state.updatingTaskIds}..remove(taskId),
+      );
+      unawaited(_syncLinearTask(taskId: taskId, inProgress: inProgress));
+      return true;
+    } catch (_) {
+      // Rollback on failure and clear updating flag
+      state = previousState;
+      return false;
+    }
   }
 
   Future<void> updateTaskTitle(String taskId, String title) async {
@@ -896,11 +1058,55 @@ class TodayController extends StateNotifier<TodayDayData> {
       return;
     }
 
+    // Local mode: soft delete by setting deletedAtMs.
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final nextTasks = [
+      for (final t in state.tasks)
+        if (t.id == taskId) t.copyWith(deletedAtMs: nowMs) else t,
+    ];
+    final nextFocus = state.focusTaskId == taskId ? null : state.focusTaskId;
+    await _saveLocalDay(
+        state.copyWith(tasks: nextTasks, focusTaskId: nextFocus));
+  }
+
+  /// Permanently removes a task (local mode only; Supabase uses hardDelete).
+  Future<void> hardDeleteTask(String taskId) async {
+    if (_isSupabaseMode) {
+      await _tasksRepository!.hardDelete(id: taskId);
+      final nextTasks = state.tasks.where((t) => t.id != taskId).toList();
+      final nextFocus = state.focusTaskId == taskId ? null : state.focusTaskId;
+      state = state.copyWith(tasks: nextTasks, focusTaskId: nextFocus);
+      if (state.focusTaskId != nextFocus) {
+        await _saveFocusTaskId(nextFocus);
+      }
+      return;
+    }
+
     final nextTasks = state.tasks.where((t) => t.id != taskId).toList();
     final nextFocus = state.focusTaskId == taskId ? null : state.focusTaskId;
     await _saveLocalDay(
         state.copyWith(tasks: nextTasks, focusTaskId: nextFocus));
   }
+
+  /// Restores a soft-deleted task.
+  Future<void> restoreTask(String taskId) async {
+    if (_isSupabaseMode) {
+      final restored = await _tasksRepository!.restore(id: taskId);
+      state = state.copyWith(tasks: [...state.tasks, _toTodayTask(restored)]);
+      return;
+    }
+
+    // Local mode: clear deletedAtMs.
+    final nextTasks = [
+      for (final t in state.tasks)
+        if (t.id == taskId) t.copyWith(deletedAtMs: null) else t,
+    ];
+    await _saveLocalDay(state.copyWith(tasks: nextTasks));
+  }
+
+  /// Returns soft-deleted tasks for this day (local mode only; Supabase uses listDeleted).
+  List<TodayTask> get deletedTasks =>
+      state.tasks.where((t) => t.isDeleted).toList();
 
   Future<void> setReflection(String text) async {
     final next = state.copyWith(reflection: text);
@@ -933,19 +1139,42 @@ class TodayController extends StateNotifier<TodayDayData> {
     }
   }
 
-  Future<void> setHabitCompleted({
+  /// Sets habit completion status with optimistic update.
+  ///
+  /// Returns `true` on success, `false` on failure (state is rolled back).
+  /// Ignores rapid double-clicks while an update is in-flight.
+  Future<bool> setHabitCompleted({
     required String habitId,
     required bool completed,
   }) async {
-    await _habitsRepository.setCompleted(
-      habitId: habitId,
-      ymd: _ymd,
-      completed: completed,
-    );
-    final nextHabits = [
+    // Ignore if already updating this habit (prevents rapid double-click bugs)
+    if (state.isHabitUpdating(habitId)) return false;
+
+    // Mark as updating + optimistic update
+    final optimisticHabits = [
       for (final h in state.habits)
         if (h.id == habitId) h.copyWith(completed: completed) else h,
     ];
-    state = state.copyWith(habits: nextHabits);
+    final previousState = state;
+    state = state.copyWith(
+      habits: optimisticHabits,
+      updatingHabitIds: {...state.updatingHabitIds, habitId},
+    );
+
+    try {
+      await _habitsRepository.setCompleted(
+        habitId: habitId,
+        ymd: _ymd,
+        completed: completed,
+      );
+      state = state.copyWith(
+        updatingHabitIds: {...state.updatingHabitIds}..remove(habitId),
+      );
+      return true;
+    } catch (_) {
+      // Rollback on failure and clear updating flag
+      state = previousState;
+      return false;
+    }
   }
 }

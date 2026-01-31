@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../assistant/assistant_models.dart';
+import '../../utils/ymd_utils.dart';
 import '../spacing.dart';
 
 class AssistantPreviewSheet extends StatelessWidget {
@@ -16,17 +16,9 @@ class AssistantPreviewSheet extends StatelessWidget {
   final String? say;
   final List<AssistantCommand> commands;
 
-  static String _ymd(DateTime dt) => DateFormat('yyyy-MM-dd').format(dt);
+  static String _ymd(DateTime dt) => formatYmd(dt);
 
-  static DateTime? _parseYmd(String ymd) {
-    final parts = ymd.split('-');
-    if (parts.length != 3) return null;
-    final y = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
-    final d = int.tryParse(parts[2]);
-    if (y == null || m == null || d == null) return null;
-    return DateTime(y, m, d);
-  }
+  static DateTime? _parseYmd(String ymd) => parseYmd(ymd);
 
   static String _taskTypeLabel(AssistantTaskType? t) {
     return switch (t) {
@@ -132,7 +124,7 @@ class AssistantPreviewSheet extends StatelessWidget {
             _PreviewRow(
               icon: Icons.note_add_outlined,
               title: 'Append to reflection',
-              subtitle: '${_ymd(execDate)}',
+              subtitle: _ymd(execDate),
             ),
           );
           break;
@@ -142,7 +134,7 @@ class AssistantPreviewSheet extends StatelessWidget {
             _PreviewRow(
               icon: Icons.edit_note_outlined,
               title: 'Set reflection',
-              subtitle: '${_ymd(execDate)}',
+              subtitle: _ymd(execDate),
             ),
           );
           break;

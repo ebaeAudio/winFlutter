@@ -38,6 +38,8 @@ dependencies:
   crypto: ^3.0.3
   flutter_markdown_plus: ^1.0.0+1
   flutter_secure_storage: ^9.0.0
+  markdown: ^7.2.2
+  url_launcher: ^6.2.5
   flutter_dotenv: ^5.1.0
   flutter_riverpod: ^2.5.1
   go_router: ^14.2.0
@@ -45,10 +47,9 @@ dependencies:
   flutter_local_notifications: ^17.2.3
   flutter_timezone: ^1.0.8
   timezone: ^0.9.4
-  # Dart SDK in this repo is 3.4.x; nfc_manager 4.x requires Dart >=3.7.
-  nfc_manager: ^3.5.0
   shared_preferences: ^2.2.3
   camera: ^0.11.0+2
+  gal: ^2.3.0
   path_provider: ^2.1.5
   speech_to_text: ^7.0.0
   supabase_flutter: ^2.5.11

@@ -11,6 +11,7 @@ class AllTask {
     required this.completed,
     required this.inProgress,
     required this.createdAtMs,
+    this.snoozedUntil,
   });
 
   final String id;
@@ -28,4 +29,7 @@ class AllTask {
 
   /// Best-effort timestamp for stable sorting.
   final int createdAtMs;
+
+  /// Optional snooze time - task is hidden from zombie alerts until this time.
+  final DateTime? snoozedUntil;
 }

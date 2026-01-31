@@ -8,11 +8,13 @@ import '../../../data/linear/linear_models.dart';
 import '../../focus/focus_ticker_provider.dart';
 import '../../../ui/spacing.dart';
 import '../../../ui/components/linear_issue_card.dart';
+import '../../../ui/components/timer_progress_ring.dart';
 import '../today_controller.dart';
 import '../today_models.dart';
 import '../today_timebox_controller.dart';
 import 'im_stuck_sheet.dart';
 import 'starter_step_sheet.dart';
+import 'wrap_up_checklist_sheet.dart';
 
 class FocusActionLane extends ConsumerStatefulWidget {
   const FocusActionLane({
@@ -38,6 +40,7 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
   bool _didTryConsumePendingAutoStart = false;
   bool _didScheduleExpiredReconcile = false;
   int? _didScheduleExpiredReconcileForStartedAtMs;
+  int? _didShowWrapUpForStartedAtMs;
 
   @override
   Widget build(BuildContext context) {
@@ -276,6 +279,7 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                     timer: timer!,
                     ymd: widget.ymd,
                     kind: TodayTimerKind.focus,
+                    onTimerCompleted: _handleTimerCompleted,
                     onSwitchTask: () => _switchTask(
                       context,
                       ymd: widget.ymd,
@@ -318,10 +322,15 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                   children: [
                     FilledButton.icon(
                       onPressed: () async {
-                        await controller.toggleTaskCompleted(focusTask.id);
+                        final success =
+                            await controller.toggleTaskCompleted(focusTask.id);
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Marked done')),
+                          SnackBar(
+                            content: Text(success
+                                ? 'Marked done'
+                                : 'Could not update task. Try again.'),
+                          ),
                         );
                       },
                       icon: const Icon(Icons.check),
@@ -480,6 +489,33 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
       ),
     );
   }
+
+  void _handleTimerCompleted(ActiveTodayTimer timer) {
+    if (timer.kind != TodayTimerKind.focus) return;
+    if (_didShowWrapUpForStartedAtMs == timer.startedAtMs) return;
+    final taskId = timer.taskId ?? widget.focusTask?.id;
+    if (taskId == null || taskId.trim().isEmpty) return;
+    TodayTask? task;
+    for (final t in widget.mustWins) {
+      if (t.id == taskId) {
+        task = t;
+        break;
+      }
+    }
+    task ??= widget.focusTask;
+    if (task == null) return;
+    if (!mounted) return;
+
+    _didShowWrapUpForStartedAtMs = timer.startedAtMs;
+    WrapUpChecklistSheet.show(
+      context,
+      ymd: widget.ymd,
+      taskId: task.id,
+      taskTitle: task.title,
+      mustWins: widget.mustWins,
+      taskNotes: task.notes,
+    );
+  }
 }
 
 class _FocusTaskHeader extends StatelessWidget {
@@ -596,6 +632,9 @@ class _StartTimerBlock extends StatelessWidget {
 class _FocusTimerBlock extends StatelessWidget {
   const _FocusTimerBlock({
     required this.remaining,
+    required this.remainingFraction,
+    required this.progress,
+    required this.accentColor,
     required this.wrapUpSoon,
     required this.onAddFive,
     required this.onEndEarly,
@@ -603,6 +642,9 @@ class _FocusTimerBlock extends StatelessWidget {
   });
 
   final Duration remaining;
+  final double remainingFraction;
+  final double progress;
+  final Color accentColor;
   final bool wrapUpSoon;
   final VoidCallback onAddFive;
   final VoidCallback onEndEarly;
@@ -622,21 +664,13 @@ class _FocusTimerBlock extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            _formatRemaining(remaining),
-            style: theme.textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w900),
+          _TimerProgressHeader(
+            remaining: remaining,
+            remainingFraction: remainingFraction,
+            progress: progress,
+            accentColor: accentColor,
+            wrapUpSoon: wrapUpSoon,
           ),
-          if (wrapUpSoon) ...[
-            Gap.h4,
-            Text(
-              'Wrap up soon',
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w800,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-          ],
           Gap.h12,
           Wrap(
             spacing: AppSpace.s8,
@@ -666,10 +700,16 @@ class _FocusTimerBlock extends StatelessWidget {
 class _BreakTimerBlock extends StatelessWidget {
   const _BreakTimerBlock({
     required this.remaining,
+    required this.remainingFraction,
+    required this.progress,
+    required this.accentColor,
     required this.onEndEarly,
   });
 
   final Duration remaining;
+  final double remainingFraction;
+  final double progress;
+  final Color accentColor;
   final VoidCallback onEndEarly;
 
   @override
@@ -686,18 +726,12 @@ class _BreakTimerBlock extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Break',
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          Gap.h4,
-          Text(
-            _formatRemaining(remaining),
-            style: theme.textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w900),
+          _TimerProgressHeader(
+            title: 'Break',
+            remaining: remaining,
+            remainingFraction: remainingFraction,
+            progress: progress,
+            accentColor: accentColor,
           ),
           Gap.h12,
           OutlinedButton(
@@ -715,6 +749,7 @@ class _TimerPanel extends ConsumerWidget {
     required this.timer,
     required this.ymd,
     required this.kind,
+    this.onTimerCompleted,
     required this.onAddFive,
     required this.onEndEarly,
     required this.onSwitchTask,
@@ -726,6 +761,7 @@ class _TimerPanel extends ConsumerWidget {
   final ActiveTodayTimer timer;
   final String ymd;
   final TodayTimerKind kind;
+  final void Function(ActiveTodayTimer timer)? onTimerCompleted;
   final VoidCallback onAddFive;
   final VoidCallback onEndEarly;
   final VoidCallback onSwitchTask;
@@ -736,9 +772,17 @@ class _TimerPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     final now = ref.watch(nowTickerProvider).valueOrNull ?? DateTime.now();
     final raw = timer.endsAt.difference(now);
     final remaining = raw.isNegative ? Duration.zero : raw;
+    final total = Duration(minutes: timer.durationMinutes);
+    final totalSeconds = total.inSeconds;
+    final remainingSeconds = remaining.inSeconds.clamp(0, totalSeconds);
+    final remainingFraction =
+        totalSeconds == 0 ? 0.0 : remainingSeconds / totalSeconds;
+    final progress = 1 - remainingFraction;
+    final accentColor = _timerAccentColor(theme, remainingFraction);
 
     final showWrapUpSoon = (kind == TodayTimerKind.focus) &&
         remaining > Duration.zero &&
@@ -752,19 +796,115 @@ class _TimerPanel extends ConsumerWidget {
       final timeboxController =
           ref.read(todayTimeboxControllerProvider(ymd).notifier);
       WidgetsBinding.instance.addPostFrameCallback((_) async {
+        onTimerCompleted?.call(timer);
         await timeboxController.reconcileExpiredNow();
       });
     }
 
     if (kind == TodayTimerKind.break_) {
-      return _BreakTimerBlock(remaining: remaining, onEndEarly: onEndEarly);
+      return _BreakTimerBlock(
+        remaining: remaining,
+        remainingFraction: remainingFraction,
+        progress: progress,
+        accentColor: accentColor,
+        onEndEarly: onEndEarly,
+      );
     }
     return _FocusTimerBlock(
       remaining: remaining,
+      remainingFraction: remainingFraction,
+      progress: progress,
+      accentColor: accentColor,
       wrapUpSoon: showWrapUpSoon,
       onAddFive: onAddFive,
       onEndEarly: onEndEarly,
       onSwitchTask: onSwitchTask,
+    );
+  }
+}
+
+class _TimerProgressHeader extends StatelessWidget {
+  const _TimerProgressHeader({
+    required this.remaining,
+    required this.remainingFraction,
+    required this.progress,
+    required this.accentColor,
+    this.title,
+    this.wrapUpSoon = false,
+  });
+
+  final Duration remaining;
+  final double remainingFraction;
+  final double progress;
+  final Color accentColor;
+  final String? title;
+  final bool wrapUpSoon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final remainingText = _formatRemaining(remaining);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Semantics(
+          label: 'Time remaining',
+          value: remainingText,
+          child: TimerProgressRing(
+            progress: progress,
+            color: accentColor,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                remainingText,
+                style: theme.textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ),
+        ),
+        Gap.w12,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (title != null) ...[
+                Text(
+                  title!,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                Gap.h4,
+              ],
+              Text(
+                'Time remaining',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              Gap.h4,
+              TimerRemainingBar(
+                remainingFraction: remainingFraction,
+                color: accentColor,
+              ),
+              if (wrapUpSoon) ...[
+                Gap.h4,
+                Text(
+                  'Wrap up soon',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: accentColor,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -774,6 +914,20 @@ String _formatRemaining(Duration d) {
   final m = d.inMinutes;
   final s = d.inSeconds - (m * 60);
   return '$m:${s.toString().padLeft(2, '0')}';
+}
+
+Color _timerAccentColor(ThemeData theme, double remainingFraction) {
+  final brightness = theme.brightness;
+  final green =
+      brightness == Brightness.dark ? Colors.green.shade400 : Colors.green.shade600;
+  final yellow =
+      brightness == Brightness.dark ? Colors.amber.shade400 : Colors.amber.shade700;
+  final red =
+      brightness == Brightness.dark ? Colors.red.shade400 : Colors.red.shade600;
+
+  if (remainingFraction > 0.5) return green;
+  if (remainingFraction > 0.25) return yellow;
+  return red;
 }
 
 Future<bool> _openStarterStep(

@@ -17,10 +17,12 @@ import '../features/settings/trackers/trackers_screen.dart';
 import '../features/setup/setup_screen.dart';
 import '../features/admin/admin_dashboard_screen.dart';
 import '../features/feedback/feedback_screen.dart';
-import '../features/nfc/nfc_scan_screen.dart';
+import '../features/notes/note_editor_screen.dart';
+import '../features/notes/notes_screen.dart';
 import '../features/pitch/pitch_page.dart';
 import '../features/tasks/all_tasks_screen.dart';
 import '../features/today/today_screen.dart';
+import '../features/today/zombie_task_review_screen.dart';
 import '../features/tasks/task_details_screen.dart';
 import '../ui/desktop_nav_shell.dart';
 import '../ui/nav_shell.dart';
@@ -91,10 +93,6 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(
-        path: '/nfc-scan',
-        builder: (context, state) => const NfcScanScreen(),
-      ),
-      GoRoute(
         path: '/setup',
         builder: (context, state) => const SetupScreen(),
       ),
@@ -131,24 +129,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/projects',
-                builder: (context, state) => const ProjectsScreen(),
-                routes: [
-                  GoRoute(
-                    path: 'secret-notes',
-                    builder: (context, state) => SecretNotesScreen(
-                      noteId: state.uri.queryParameters['note'],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
                 path: '/tasks',
                 builder: (context, state) => const AllTasksScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'cleanup',
+                    builder: (context, state) => const ZombieTaskReviewScreen(),
+                  ),
+                ],
               ),
             ],
           ),
@@ -241,6 +229,30 @@ final routerProvider = Provider<GoRouter>((ref) {
                   GoRoute(
                     path: 'admin',
                     builder: (context, state) => const AdminDashboardScreen(),
+                  ),
+                  GoRoute(
+                    path: 'notes',
+                    builder: (context, state) => const NotesScreen(),
+                    routes: [
+                      GoRoute(
+                        path: ':id',
+                        builder: (context, state) => NoteEditorScreen(
+                          noteId: state.pathParameters['id'] ?? '',
+                        ),
+                      ),
+                    ],
+                  ),
+                  GoRoute(
+                    path: 'projects',
+                    builder: (context, state) => const ProjectsScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'secret-notes',
+                        builder: (context, state) => SecretNotesScreen(
+                          noteId: state.uri.queryParameters['note'],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -1,100 +1,89 @@
-import 'focus_session.dart';
-
-class FocusSessionQuitStats {
-  const FocusSessionQuitStats({
+/// Computed statistics for dumb phone (focus) sessions.
+class FocusSessionStats {
+  const FocusSessionStats({
     required this.totalSessions,
-    required this.earlyExits,
-    required this.completedSessions,
-    required this.earlyExitRate,
-    required this.currentQuitterStreak,
-    required this.longestCompletionStreak,
-    required this.totalTimeWasted,
-    required this.worstQuitTimeRemaining,
-    required this.worstQuitDate,
+    required this.completedOnTime,
+    required this.endedEarly,
+    required this.emergencyEnds,
+    required this.totalFocusMinutes,
+    required this.averageSessionMinutes,
+    required this.longestSessionMinutes,
+    required this.sessionsThisWeek,
+    required this.sessionsThisMonth,
+    required this.currentStreak,
+    required this.longestStreak,
+    required this.mostProductiveDayOfWeek,
+    required this.totalEmergencyUnlocksUsed,
   });
 
+  /// Total number of completed sessions (all time).
   final int totalSessions;
-  final int earlyExits;
-  final int completedSessions;
 
-  /// 0.0 - 1.0
-  final double earlyExitRate;
+  /// Sessions that ran to their planned end time.
+  final int completedOnTime;
 
-  /// Consecutive early exits, starting from the most recent session.
-  final int currentQuitterStreak;
+  /// Sessions ended early by user choice.
+  final int endedEarly;
 
-  /// Longest streak of completed sessions (in history order).
-  final int longestCompletionStreak;
+  /// Sessions ended via emergency exception.
+  final int emergencyEnds;
 
-  /// Sum of (plannedEndAt - endedAt) across early exits (positive deltas only).
-  final Duration totalTimeWasted;
+  /// Total minutes spent in focus mode.
+  final int totalFocusMinutes;
 
-  /// Most time remaining when the user quit (max of plannedEndAt - endedAt).
-  final Duration? worstQuitTimeRemaining;
-  final DateTime? worstQuitDate;
+  /// Average session duration in minutes.
+  final double averageSessionMinutes;
 
-  static FocusSessionQuitStats compute(List<FocusSession> history) {
-    final total = history.length;
-    int early = 0;
-    int completed = 0;
+  /// Longest single session in minutes.
+  final int longestSessionMinutes;
 
-    int quitterStreak = 0;
-    int completionStreak = 0;
-    int longestCompletionStreak = 0;
+  /// Sessions completed in the current calendar week (Mon-Sun).
+  final int sessionsThisWeek;
 
-    Duration wastedTotal = Duration.zero;
-    Duration? worstRemaining;
-    DateTime? worstDate;
+  /// Sessions completed in the current calendar month.
+  final int sessionsThisMonth;
 
-    for (int i = 0; i < history.length; i++) {
-      final s = history[i];
-      final reason = s.endReason;
+  /// Current streak: consecutive days with at least one completed session.
+  final int currentStreak;
 
-      if (reason == FocusSessionEndReason.userEarlyExit) {
-        early++;
-        if (i == quitterStreak) {
-          // Still in the consecutive prefix.
-          quitterStreak++;
-        }
-        completionStreak = 0;
-      } else if (reason == FocusSessionEndReason.completed) {
-        completed++;
-        completionStreak++;
-        if (completionStreak > longestCompletionStreak) {
-          longestCompletionStreak = completionStreak;
-        }
-      } else {
-        // Other end reasons break completion streak, but still count toward totals.
-        completionStreak = 0;
-      }
+  /// Longest streak ever achieved.
+  final int longestStreak;
 
-      if (reason == FocusSessionEndReason.userEarlyExit) {
-        final endedAt = s.endedAt;
-        if (endedAt != null) {
-          final remaining = s.plannedEndAt.difference(endedAt);
-          if (remaining > Duration.zero) {
-            wastedTotal += remaining;
-            if (worstRemaining == null || remaining > worstRemaining) {
-              worstRemaining = remaining;
-              worstDate = endedAt;
-            }
-          }
-        }
-      }
-    }
+  /// The day of the week with the most sessions (1=Mon, 7=Sun), or null if no data.
+  final int? mostProductiveDayOfWeek;
 
-    final earlyExitRate = total == 0 ? 0.0 : (early / total);
-    return FocusSessionQuitStats(
-      totalSessions: total,
-      earlyExits: early,
-      completedSessions: completed,
-      earlyExitRate: earlyExitRate,
-      currentQuitterStreak: quitterStreak,
-      longestCompletionStreak: longestCompletionStreak,
-      totalTimeWasted: wastedTotal,
-      worstQuitTimeRemaining: worstRemaining,
-      worstQuitDate: worstDate,
-    );
+  /// Total emergency unlocks used across all sessions.
+  final int totalEmergencyUnlocksUsed;
+
+  /// Human-readable day name for the most productive day.
+  String? get mostProductiveDayName {
+    if (mostProductiveDayOfWeek == null) return null;
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final idx = mostProductiveDayOfWeek! - 1;
+    if (idx < 0 || idx >= days.length) return null;
+    return days[idx];
   }
-}
 
+  /// Completion rate: sessions that ran to planned end vs total.
+  double get completionRate =>
+      totalSessions > 0 ? completedOnTime / totalSessions : 0.0;
+
+  /// Total focus time as a Duration.
+  Duration get totalFocusDuration => Duration(minutes: totalFocusMinutes);
+
+  static const empty = FocusSessionStats(
+    totalSessions: 0,
+    completedOnTime: 0,
+    endedEarly: 0,
+    emergencyEnds: 0,
+    totalFocusMinutes: 0,
+    averageSessionMinutes: 0,
+    longestSessionMinutes: 0,
+    sessionsThisWeek: 0,
+    sessionsThisMonth: 0,
+    currentStreak: 0,
+    longestStreak: 0,
+    mostProductiveDayOfWeek: null,
+    totalEmergencyUnlocksUsed: 0,
+  );
+}

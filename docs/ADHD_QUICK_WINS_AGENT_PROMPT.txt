@@ -1,0 +1,73 @@
+Implement the 8 ADHD Quick Wins from docs/ADHD_IMPROVEMENTS_RECOMMENDATIONS.md. These are low-effort, high-impact improvements for ADHD users.
+
+QUICK WINS TO IMPLEMENT:
+
+1. Visual Progress Indicators for Timer
+   - Add circular progress ring around timer
+   - Add shrinking "time remaining" bar
+   - Color transitions: green → yellow → red (based on % remaining)
+   - Modify: lib/features/today/widgets/focus_action_lane.dart
+
+2. Explain "Why" in Notifications/Prompts
+   - Add brief rationale to all prompts (1 sentence max)
+   - Examples: "You set 3 Must-Wins today. 2 are done. Time to tackle the last one?"
+   - Update coach messages, focus prompts, notifications
+
+3. Graded Prompts (Start Small)
+   - Morning: "What's your one Must-Win today?" (not "plan your whole day")
+   - Afternoon: "How's that Must-Win going?" (not "complete everything")
+   - Evening: "Quick reflection: what helped today?" (not long journal)
+   - Break large actions into micro-steps
+
+4. Transition Checklists When Timer Ends
+   - When timebox ends, show "Wrap up checklist" bottom sheet:
+     - "Save your work" (checkbox)
+     - "Note where you left off" (text input → saves to task notes)
+     - "Set next session focus" (optional)
+   - Create: lib/features/today/widgets/wrap_up_checklist_sheet.dart
+
+5. "Where Was I?" Resume Feature
+   - Add "Resume" card on Today screen when user had interrupted work
+   - Show: "You were working on [task] for [X] minutes"
+   - Tapping resume restores focus mode with that task
+   - Persist last active task in local storage
+
+6. Context Save on Task Switch
+   - When switching focus task, optional prompt: "Quick note: where did you leave off?"
+   - Auto-saves to task notes
+   - When returning to task, show "Last time: [context note]"
+   - Non-intrusive, optional
+
+7. Dyslexia-Friendly Font Option
+   - Add font picker in Settings → Appearance
+   - Options: "System Default" | "Dyslexia-Friendly"
+   - Apply globally via theme
+   - May need open_dyslexic package or system accessibility font
+
+8. Reduce Motion / Animation Controls
+   - Respect system "Reduce Motion" setting
+   - Add "Reduce Animations" toggle in Settings
+   - When enabled: disable/minimize celebratory animations (W-drop, etc.)
+   - Keep essential UI animations minimal
+
+REQUIREMENTS:
+- Follow existing design system (AppScaffold, Gap, AppSpace, theme.dart)
+- Maintain ADHD-first UX: one path, small commitments, gentle recovery
+- Keep UI accessible: ≥44px touch targets, good contrast
+- Settings persist across app restarts
+- No regressions in existing features
+
+IMPLEMENTATION ORDER (suggested):
+1. Visual Progress Indicators (#1)
+2. Transition Checklists (#4)
+3. "Where Was I?" Resume (#5)
+4. Context Save (#6)
+5. Explain "Why" (#2)
+6. Graded Prompts (#3)
+7. Reduce Motion (#8)
+8. Dyslexia Font (#7)
+
+REFERENCE:
+- Full details: docs/ADHD_QUICK_WINS_IMPLEMENTATION_PROMPT.md
+- Recommendations: docs/ADHD_IMPROVEMENTS_RECOMMENDATIONS.md
+- UI guidelines: docs/FRONTEND_SPEC.md

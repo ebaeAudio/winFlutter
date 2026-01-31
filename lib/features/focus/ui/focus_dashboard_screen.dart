@@ -1,21 +1,22 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gal/gal.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../app/auth.dart';
+import '../../../app/supabase.dart';
 import '../../../domain/focus/focus_session.dart';
 import '../../../domain/focus/focus_policy.dart';
 import '../../../domain/focus/focus_friction.dart';
+import '../../../app/theme.dart';
+import '../../../app/user_settings.dart';
 import '../../../ui/app_scaffold.dart';
 import '../../../ui/spacing.dart';
-import '../../../app/user_settings.dart';
-import '../../../platform/nfc/nfc_card_service.dart';
-import '../../../platform/nfc/nfc_scan_purpose.dart';
-import '../../../platform/nfc/nfc_scan_service.dart';
 import '../../../ui/components/w_drop_celebration_overlay.dart';
 import '../../today/today_controller.dart';
 import '../../today/today_models.dart';
@@ -29,6 +30,7 @@ import '../task_unlock/active_session_task_unlock_controller.dart';
 import 'widgets/hold_to_confirm_button.dart';
 import 'widgets/task_unlock_picker_sheet.dart';
 import '../../../ui/components/clown_cam_gate_sheet.dart';
+import '../../../ui/components/shame_delay_sheet.dart';
 
 class FocusDashboardScreen extends ConsumerStatefulWidget {
   const FocusDashboardScreen({super.key});
@@ -44,19 +46,6 @@ class _FocusDashboardScreenState extends ConsumerState<FocusDashboardScreen> {
       WCelebrationDecider(chance: _kWCelebrationChance);
 
   bool _showW = false;
-
-  void _triggerWTest() {
-    // The overlay plays when `play` flips false -> true.
-    if (_showW) {
-      setState(() => _showW = false);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() => _showW = true);
-      });
-      return;
-    }
-    setState(() => _showW = true);
-  }
 
   void _maybeTriggerWCelebration({
     required AsyncValue<FocusSession?>? previous,
@@ -93,7 +82,6 @@ class _FocusDashboardScreenState extends ConsumerState<FocusDashboardScreen> {
 
     return AppScaffold(
       title: 'Dumb Phone Mode',
-      children: const [],
       actions: [
         IconButton(
           tooltip: 'History',
@@ -112,6 +100,11 @@ class _FocusDashboardScreenState extends ConsumerState<FocusDashboardScreen> {
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(AppSpace.s16),
             children: [
+              // "Start on iPhone" card: show on macOS so user can trigger Dumb Phone on iPhone from Mac.
+              if (!kIsWeb && defaultTargetPlatform == TargetPlatform.macOS) ...[
+                const RemoteStartOnIPhoneCard(),
+                Gap.h12,
+              ],
               Builder(
                 builder: (context) {
                   final session = active.valueOrNull;
@@ -166,7 +159,6 @@ class _FocusDashboardScreenState extends ConsumerState<FocusDashboardScreen> {
                     ),
                     data: (items) => _StartSessionCard(
                       policies: items,
-                      onTestCelebration: kDebugMode ? _triggerWTest : null,
                     ),
                   );
                 },
@@ -189,6 +181,7 @@ class _FocusDashboardScreenState extends ConsumerState<FocusDashboardScreen> {
           ),
         ],
       ),
+      children: const [],
     );
   }
 }
@@ -227,13 +220,16 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
   @override
   Widget build(BuildContext context) {
     final session = widget.session;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
     if (session == null) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Text(
-            'No active Focus Session.',
-            style: Theme.of(context).textTheme.titleMedium,
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpace.s16),
+        child: Text(
+          'No active session',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
           ),
         ),
       );
@@ -260,7 +256,6 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
     final friction = policy?.friction ?? FocusFrictionSettings.defaults;
     final effectiveFriction = session.friction ?? friction;
     final gate = ref.watch(dumbPhoneSessionGateControllerProvider).valueOrNull;
-    final requireCardToEndEarly = gate?.requireCardToEndEarly == true;
     final requireSelfieToEndEarly = gate?.requireSelfieToEndEarly == true;
     final unlockConfig =
         ref.watch(activeSessionTaskUnlockControllerProvider).valueOrNull;
@@ -300,195 +295,183 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
       });
     }
 
-    final scheme = Theme.of(context).colorScheme;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header
+        Row(
           children: [
-            Row(
-              children: [
-                Icon(Icons.timer, color: scheme.onSurfaceVariant),
-                Gap.w12,
-                Expanded(
-                  child: Text(
-                    'Focus Session Active',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-              ],
-            ),
-            if (widget.isEnding) ...[
-              const SizedBox(height: 8),
-              const LinearProgressIndicator(),
-              const SizedBox(height: 6),
-              Text(
-                'Ending session…',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-            if (!widget.isEnding && widget.error != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Session warning: ${widget.error}',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ],
-            Gap.h12,
-            // Large prominent timer display
-            Center(
+            Icon(Icons.timer_outlined, size: 20, color: scheme.primary),
+            Gap.w8,
+            Expanded(
               child: Text(
-                mmss,
-                style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
+                'Session Active',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
-            Gap.h8,
-            Center(
-              child: Text(
-                'remaining',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+          ],
+        ),
+        if (widget.isEnding) ...[
+          Gap.h8,
+          const LinearProgressIndicator(),
+          Gap.h4,
+          Text(
+            'Ending session…',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        if (!widget.isEnding && widget.error != null) ...[
+          Gap.h8,
+          Text(
+            'Warning: ${widget.error}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.error,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+        Gap.h16,
+        // Large timer display
+        Center(
+          child: Text(
+            mmss,
+            style: theme.textTheme.displayMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+        Gap.h4,
+        Center(
+          child: Text(
+            'remaining',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Gap.h16,
+        LinearProgressIndicator(value: progress),
+        Gap.h8,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Started ${DateFormat.Hm().format(session.startedAt)}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
               ),
             ),
-            Gap.h12,
-            LinearProgressIndicator(value: progress),
-            Gap.h8,
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Started ${DateFormat.Hm().format(session.startedAt)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                Text(
-                  'Ends ${DateFormat.Hm().format(session.plannedEndAt)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+            Text(
+              'Ends ${DateFormat.Hm().format(session.plannedEndAt)}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
             ),
-            const SizedBox(height: 12),
-            if (unlockRequiredCount > 0 && unlockYmd != null) ...[
-              _UnlockToEndEarlySection(
+          ],
+        ),
+        if (unlockRequiredCount > 0 && unlockYmd != null) ...[
+          _UnlockToEndEarlySection(
+            ymd: unlockYmd,
+            requiredCount: unlockRequiredCount,
+            requiredTaskIds: unlockTaskIds,
+            doneCount: unlockDone,
+            missingCount: unlockMissing,
+            onEdit: () async {
+              final result = await TaskUnlockPickerSheet.show(
+                context,
                 ymd: unlockYmd,
                 requiredCount: unlockRequiredCount,
-                requiredTaskIds: unlockTaskIds,
-                doneCount: unlockDone,
-                missingCount: unlockMissing,
-                onEdit: () async {
-                  final result = await TaskUnlockPickerSheet.show(
-                    context,
-                    ymd: unlockYmd,
-                    requiredCount: unlockRequiredCount,
-                    initialSelectedTaskIds: unlockTaskIds,
-                  );
-                  if (result == null) return;
-                  try {
-                    await ref
-                        .read(activeSessionTaskUnlockControllerProvider.notifier)
-                        .updateRequiredTaskIds(requiredTaskIds: result.taskIds);
-                  } catch (e) {
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to update unlock tasks: $e')),
-                    );
-                  }
-                },
-                onGoToToday: () => context.go('/today?ymd=$unlockYmd'),
-                onToggleTask: (taskId) async {
-                  final todayController =
-                      ref.read(todayControllerProvider(unlockYmd).notifier);
-                  final beforeDay = ref.read(todayControllerProvider(unlockYmd));
-                  bool wasCompleted = false;
-                  for (final t in beforeDay.tasks) {
-                    if (t.id == taskId) {
-                      wasCompleted = t.completed;
-                      break;
-                    }
-                  }
-
-                  await todayController.toggleTaskCompleted(taskId);
-
-                  final afterDay = ref.read(todayControllerProvider(unlockYmd));
-                  bool isCompleted = false;
-                  for (final t in afterDay.tasks) {
-                    if (t.id == taskId) {
-                      isCompleted = t.completed;
-                      break;
-                    }
-                  }
-
-                  if (!wasCompleted && isCompleted) {
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-            ],
-            HoldToConfirmButton(
-              holdDuration: Duration(seconds: effectiveFriction.holdToUnlockSeconds),
-              label: requireCardToEndEarly && requireSelfieToEndEarly
-                  ? 'Hold, scan card, then clown cam to end'
-                  : requireCardToEndEarly
-                      ? 'Hold, then scan card to end'
-                      : requireSelfieToEndEarly
-                          ? 'Hold, then clown cam to end'
-                          : unlockSatisfied
-                              ? 'Hold to end session early'
-                              : 'Complete unlock tasks to end early',
-              icon: Icons.stop_circle,
-              enabled: !widget.isEnding && unlockSatisfied,
-              busyLabel: 'Ending…',
-              onConfirmed: () async {
+                initialSelectedTaskIds: unlockTaskIds,
+              );
+              if (result == null) return;
+              try {
+                await ref
+                    .read(activeSessionTaskUnlockControllerProvider.notifier)
+                    .updateRequiredTaskIds(requiredTaskIds: result.taskIds);
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to update: $e')),
+                );
+              }
+            },
+            onGoToToday: () => context.go('/today?ymd=$unlockYmd'),
+            onToggleTask: (taskId) async {
+              final todayController =
+                  ref.read(todayControllerProvider(unlockYmd).notifier);
+              final beforeDay = ref.read(todayControllerProvider(unlockYmd));
+              bool wasCompleted = false;
+              for (final t in beforeDay.tasks) {
+                if (t.id == taskId) {
+                  wasCompleted = t.completed;
+                  break;
+                }
+              }
+              await todayController.toggleTaskCompleted(taskId);
+              final afterDay = ref.read(todayControllerProvider(unlockYmd));
+              bool isCompleted = false;
+              for (final t in afterDay.tasks) {
+                if (t.id == taskId) {
+                  isCompleted = t.completed;
+                  break;
+                }
+              }
+              if (!wasCompleted && isCompleted) {
+                // Task completed
+              }
+            },
+          ),
+          Gap.h16,
+        ],
+        HoldToConfirmButton(
+          holdDuration: Duration(seconds: effectiveFriction.holdToUnlockSeconds),
+          label: requireSelfieToEndEarly
+              ? 'Hold, then selfie to end'
+              : unlockSatisfied
+                  ? 'Hold to end early'
+                  : 'Complete tasks to end early',
+          icon: Icons.stop_circle,
+          enabled: !widget.isEnding && unlockSatisfied,
+          busyLabel: 'Ending…',
+          onConfirmed: () async {
                 // Capture the controller before any await; `ref` can't be used after dispose.
                 final gateController =
                     ref.read(dumbPhoneSessionGateControllerProvider.notifier);
-                final pairedHash = ref
-                    .read(dumbPhoneSessionGateControllerProvider)
-                    .valueOrNull
-                    ?.pairedCardKeyHash;
-                final nfc = ref.read(nfcCardServiceProvider);
+
+                // Pre-request photo library permission BEFORE the delay if clown cam is required.
+                // This avoids the awkward permission prompt after waiting.
+                // Note: We use add-only permission (no toAlbum) to avoid "Select Photos" dialog on iOS 14+.
+                if (requireSelfieToEndEarly && !kIsWeb) {
+                  final hasAccess = await Gal.hasAccess();
+                  if (!hasAccess) {
+                    final granted = await Gal.requestAccess();
+                    if (!granted) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Photo Library access is required for the clown cam check.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+                  }
+                }
 
                 // Apply the configured "unlock delay" as a baseline.
                 // (Android also enforces this delay on the native blocking screen.)
                 if (effectiveFriction.unlockDelaySeconds > 0) {
-                  await Future<void>.delayed(
-                    Duration(seconds: effectiveFriction.unlockDelaySeconds),
+                  if (!context.mounted) return;
+                  await ShameDelaySheet.show(
+                    context,
+                    delaySeconds: effectiveFriction.unlockDelaySeconds,
                   );
-                }
-
-                Future<bool> ensureCardValidated(BuildContext ctx) async {
-                  if (!requireCardToEndEarly) return true;
-                  if (pairedHash == null || pairedHash.isEmpty) {
-                    if (ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(
-                          content: Text('Pair a card to enable this setting.'),
-                        ),
-                      );
-                    }
-                    return false;
-                  }
-
-                  final scan = await ref
-                      .read(nfcScanServiceProvider)
-                      .scanKeyHash(ctx, purpose: NfcScanPurpose.validateEnd);
-                  if (scan == null) return false;
-
-                  final ok = nfc.constantTimeEquals(scan, pairedHash);
-                  if (!ok && ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(
-                      const SnackBar(content: Text('That is not the paired card.')),
-                    );
-                  }
-                  return ok;
                 }
 
                 Future<bool> ensureSelfieValidated(BuildContext ctx) async {
@@ -506,10 +489,10 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
                   return await ClownCamGateSheet.show(ctx);
                 }
 
+                if (!context.mounted) return;
                 await gateController.endSession(
                   context: context,
                   reason: FocusSessionEndReason.userEarlyExit,
-                  ensureCardValidated: ensureCardValidated,
                   ensureSelfieValidated: ensureSelfieValidated,
                 );
 
@@ -519,23 +502,19 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
                         true;
                 if (!stillActive) {}
               },
-            ),
-            const SizedBox(height: 8),
-            Text(
-              requireCardToEndEarly && requireSelfieToEndEarly
-                  ? 'To end early: open Dumb Phone Mode → hold for ${effectiveFriction.holdToUnlockSeconds}s, wait ${effectiveFriction.unlockDelaySeconds}s, scan your paired card, then do the clown cam check.'
-                  : requireCardToEndEarly
-                      ? 'To end early: open Dumb Phone Mode → hold for ${effectiveFriction.holdToUnlockSeconds}s, wait ${effectiveFriction.unlockDelaySeconds}s, then scan your paired card.'
-                      : requireSelfieToEndEarly
-                          ? 'To end early: open Dumb Phone Mode → hold for ${effectiveFriction.holdToUnlockSeconds}s, wait ${effectiveFriction.unlockDelaySeconds}s, then do the clown cam check.'
-                          : unlockRequiredCount > 0
-                              ? 'To end early: complete your unlock tasks, then hold for ${effectiveFriction.holdToUnlockSeconds}s and wait ${effectiveFriction.unlockDelaySeconds}s.'
-                              : 'To end early: open Dumb Phone Mode → hold for ${effectiveFriction.holdToUnlockSeconds}s, then wait ${effectiveFriction.unlockDelaySeconds}s.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
         ),
-      ),
+        Gap.h8,
+        Text(
+          requireSelfieToEndEarly
+              ? 'Hold ${effectiveFriction.holdToUnlockSeconds}s → wait ${effectiveFriction.unlockDelaySeconds}s → selfie'
+              : unlockRequiredCount > 0
+                  ? 'Complete tasks → hold ${effectiveFriction.holdToUnlockSeconds}s → wait ${effectiveFriction.unlockDelaySeconds}s'
+                  : 'Hold ${effectiveFriction.holdToUnlockSeconds}s → wait ${effectiveFriction.unlockDelaySeconds}s',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 
@@ -550,11 +529,9 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
 class _StartSessionCard extends ConsumerStatefulWidget {
   const _StartSessionCard({
     required this.policies,
-    this.onTestCelebration,
   });
 
   final List<FocusPolicy> policies;
-  final VoidCallback? onTestCelebration;
 
   @override
   ConsumerState<_StartSessionCard> createState() => _StartSessionCardState();
@@ -565,7 +542,7 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
   double _minutes = 25;
   _StartSessionMode _mode = _StartSessionMode.duration;
   TimeOfDay? _endTime;
-  _SessionPreset _preset = _SessionPreset.normal;
+  _SessionPreset _preset = _SessionPreset.two;
 
   @override
   void initState() {
@@ -585,13 +562,11 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
     final startState = ref.watch(activeFocusSessionProvider);
     final settings = ref.watch(userSettingsControllerProvider);
     final gate = ref.watch(dumbPhoneSessionGateControllerProvider).valueOrNull;
-    final requireCardToEndEarly = gate?.requireCardToEndEarly == true;
     final requireSelfieToEndEarly = gate?.requireSelfieToEndEarly == true;
     final now = DateTime.now();
     final endAt = _endAtForToday(now: now);
     final endAtIsValid = endAt != null && endAt.isAfter(now);
-    final endAtDurationMinutes =
-        endAt == null ? null : endAt.difference(now).inMinutes;
+    final endAtDurationMinutes = endAt?.difference(now).inMinutes;
     final missingPolicySelection = policies.isEmpty || _policyId == null;
     final startDisabled = startState.isLoading ||
         (!missingPolicySelection &&
@@ -609,258 +584,242 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
 
     final presetFriction = _SessionPreset.frictionFor(_preset);
     final requiredUnlockCount = _SessionPreset.requiredUnlockTaskCount(_preset);
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Start a session',
-                style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            if (policies.isEmpty)
-              const Text('Create a policy to get started.')
-            else
-              DropdownButtonFormField<String>(
-                value: _policyId,
-                items: [
-                  for (final p in policies)
-                    DropdownMenuItem(
-                      value: p.id,
-                      child: Text(p.name),
-                    ),
-                ],
-                onChanged: (v) => setState(() => _policyId = v),
-                decoration: const InputDecoration(labelText: 'Policy'),
-              ),
-            const SizedBox(height: 12),
-            SegmentedButton<_StartSessionMode>(
-              segments: const [
-                ButtonSegment(
-                  value: _StartSessionMode.duration,
-                  label: Text('Duration'),
-                ),
-                ButtonSegment(
-                  value: _StartSessionMode.endAt,
-                  label: Text('End at'),
-                ),
-              ],
-              selected: {_mode},
-              onSelectionChanged: (set) {
-                if (set.isEmpty) return;
-                setState(() => _mode = set.first);
-              },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Start a session',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        Gap.h12,
+        if (policies.isEmpty)
+          Text(
+            'Create a policy to get started',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
             ),
-            const SizedBox(height: 12),
-            if (_mode == _StartSessionMode.duration) ...[
-              Text('Duration: ${_minutes.toInt()} min'),
-              Slider(
-                value: _minutes,
-                min: 5,
-                max: 180,
-                divisions: 35,
-                label: '${_minutes.toInt()} min',
-                onChanged: (v) => setState(() => _minutes = v),
-              ),
-            ] else ...[
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: startState.isLoading
-                          ? null
-                          : () async {
-                              final picked = await showTimePicker(
-                                context: context,
-                                initialTime: _endTime ??
-                                    TimeOfDay.fromDateTime(
-                                      now.add(const Duration(minutes: 60)),
-                                    ),
-                              );
-                              if (picked == null) return;
-                              if (!mounted) return;
-                              setState(() => _endTime = picked);
-                            },
-                      icon: const Icon(Icons.schedule),
-                      label: Text(
-                        _endTime == null
-                            ? 'Pick end time'
-                            : 'End at ${_endTime!.format(context)}',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (_endTime != null && !endAtIsValid) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'End time must be in the future.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.error,
-                        fontWeight: FontWeight.w700,
-                      ),
+          )
+        else
+          DropdownButtonFormField<String>(
+            value: _policyId,
+            items: [
+              for (final p in policies)
+                DropdownMenuItem(
+                  value: p.id,
+                  child: Text(p.name),
                 ),
-              ],
-              if (_endTime != null && endAtIsValid && endAtDurationMinutes != null)
-                ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Duration: $endAtDurationMinutes min',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
             ],
-            const SizedBox(height: 12),
-            Text('Preset', style: Theme.of(context).textTheme.titleSmall),
-            const SizedBox(height: 8),
-            SegmentedButton<_SessionPreset>(
-              segments: const [
-                ButtonSegment(value: _SessionPreset.light, label: Text('Light')),
-                ButtonSegment(value: _SessionPreset.normal, label: Text('Normal')),
-                ButtonSegment(value: _SessionPreset.extreme, label: Text('Extreme')),
-              ],
-              selected: {_preset},
-              onSelectionChanged: (set) {
-                if (set.isEmpty) return;
-                setState(() => _preset = set.first);
-              },
+            onChanged: (v) => setState(() => _policyId = v),
+            decoration: const InputDecoration(labelText: 'Policy'),
+          ),
+        Gap.h16,
+        SegmentedButton<_StartSessionMode>(
+          segments: const [
+            ButtonSegment(value: _StartSessionMode.duration, label: Text('Duration')),
+            ButtonSegment(value: _StartSessionMode.endAt, label: Text('End at')),
+          ],
+          selected: {_mode},
+          onSelectionChanged: (set) {
+            if (set.isEmpty) return;
+            setState(() => _mode = set.first);
+          },
+        ),
+        Gap.h12,
+        if (_mode == _StartSessionMode.duration) ...[
+          Text(
+            '${_minutes.toInt()} minutes',
+            style: theme.textTheme.bodyMedium,
+          ),
+          Slider(
+            value: _minutes,
+            min: 5,
+            max: 180,
+            divisions: 35,
+            label: '${_minutes.toInt()} min',
+            onChanged: (v) => setState(() => _minutes = v),
+          ),
+        ] else ...[
+          OutlinedButton.icon(
+            onPressed: startState.isLoading
+                ? null
+                : () async {
+                    final picked = await showTimePicker(
+                      context: context,
+                      initialTime: _endTime ??
+                          TimeOfDay.fromDateTime(
+                            now.add(const Duration(minutes: 60)),
+                          ),
+                    );
+                    if (picked == null) return;
+                    if (!mounted) return;
+                    setState(() => _endTime = picked);
+                  },
+            icon: const Icon(Icons.schedule, size: 18),
+            label: Text(
+              _endTime == null ? 'Pick end time' : 'End at ${_endTime!.format(context)}',
             ),
-            const SizedBox(height: 8),
+          ),
+          if (_endTime != null && !endAtIsValid) ...[
+            Gap.h8,
             Text(
-              requiredUnlockCount <= 0
-                  ? 'Early-exit requirement: None'
-                  : 'Early-exit requirement: Complete $requiredUnlockCount tasks to unlock',
-              style: Theme.of(context).textTheme.bodySmall,
+              'End time must be in the future',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.error,
+                fontWeight: FontWeight.w600,
+              ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: startDisabled
-                        ? null
-                        : policies.isEmpty || _policyId == null
-                            ? () => context.go('/focus/policies')
-                            : () async {
-                                final now = DateTime.now();
-                                final policy = selected;
-                                if (policy == null) return;
-                                final ymd =
-                                    DateFormat('yyyy-MM-dd').format(now);
+          ],
+          if (_endTime != null && endAtIsValid && endAtDurationMinutes != null) ...[
+            Gap.h8,
+            Text(
+              'Duration: $endAtDurationMinutes min',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ],
+        Gap.h16,
+        Text(
+          'Tasks to complete before ending early',
+          style: theme.textTheme.labelLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        Gap.h8,
+        SegmentedButton<_SessionPreset>(
+          segments: const [
+            ButtonSegment(value: _SessionPreset.zero, label: Text('0')),
+            ButtonSegment(value: _SessionPreset.one, label: Text('1')),
+            ButtonSegment(value: _SessionPreset.two, label: Text('2')),
+            ButtonSegment(value: _SessionPreset.three, label: Text('3')),
+          ],
+          selected: {_preset},
+          onSelectionChanged: (set) {
+            if (set.isEmpty) return;
+            setState(() => _preset = set.first);
+          },
+        ),
+        if (requiredUnlockCount > 0) ...[
+          Gap.h4,
+          Text(
+            'Complete $requiredUnlockCount task${requiredUnlockCount == 1 ? '' : 's'} to unlock early exit',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: startDisabled
+                    ? null
+                    : policies.isEmpty || _policyId == null
+                        ? () => context.go('/focus/policies')
+                    : () async {
+                        final now = DateTime.now();
+                        final policy = selected;
+                        if (policy == null) return;
+                        final ymd = DateFormat('yyyy-MM-dd').format(now);
 
-                                final computedEndsAt =
-                                    _mode == _StartSessionMode.duration
-                                        ? now.add(
-                                            Duration(minutes: _minutes.toInt()),
-                                          )
-                                        : _endAtForToday(now: now)!;
-                                final computedDuration =
-                                    _mode == _StartSessionMode.duration
-                                        ? Duration(minutes: _minutes.toInt())
-                                        : computedEndsAt.difference(now);
+                        final computedEndsAt = _mode == _StartSessionMode.duration
+                            ? now.add(Duration(minutes: _minutes.toInt()))
+                            : _endAtForToday(now: now)!;
+                        final computedDuration = _mode == _StartSessionMode.duration
+                            ? Duration(minutes: _minutes.toInt())
+                            : computedEndsAt.difference(now);
 
-                                final ok = await _confirmStart(
-                                  context: context,
-                                  policy: policy,
-                                  endsAt: computedEndsAt,
-                                  duration: computedDuration,
-                                  friction: presetFriction,
-                                  requiredUnlockTaskCount: requiredUnlockCount,
-                                  requireCardToEndEarly: requireCardToEndEarly,
-                                  requireSelfieToEndEarly:
-                                      requireSelfieToEndEarly,
-                                );
-                                if (!ok) return;
-                                if (!context.mounted) return;
+                        final ok = await _confirmStart(
+                          context: context,
+                          policy: policy,
+                          endsAt: computedEndsAt,
+                          duration: computedDuration,
+                          friction: presetFriction,
+                          requiredUnlockTaskCount: requiredUnlockCount,
+                          requireSelfieToEndEarly: requireSelfieToEndEarly,
+                        );
+                        if (!ok) return;
+                        if (!context.mounted) return;
 
-                                List<String> unlockTaskIds = const [];
-                                if (requiredUnlockCount > 0) {
-                                  final picked =
-                                      await TaskUnlockPickerSheet.show(
-                                    context,
-                                    ymd: ymd,
-                                    requiredCount: requiredUnlockCount,
-                                    initialSelectedTaskIds: const [],
-                                  );
-                                  if (picked == null) return;
-                                  unlockTaskIds = picked.taskIds;
-                                }
+                        List<String> unlockTaskIds = const [];
+                        if (requiredUnlockCount > 0) {
+                          final picked = await TaskUnlockPickerSheet.show(
+                            context,
+                            ymd: ymd,
+                            requiredCount: requiredUnlockCount,
+                            initialSelectedTaskIds: const [],
+                          );
+                          if (picked == null) return;
+                          unlockTaskIds = picked.taskIds;
+                        }
 
-                                final gateController = ref.read(
-                                  dumbPhoneSessionGateControllerProvider.notifier,
-                                );
+                        final gateController = ref.read(
+                          dumbPhoneSessionGateControllerProvider.notifier,
+                        );
 
-                                final started = await gateController.startSession(
-                                  context: context,
-                                  policyId: policy.id,
-                                  duration: _mode == _StartSessionMode.duration
-                                      ? Duration(minutes: _minutes.toInt())
-                                      : null,
-                                  endsAt: _mode == _StartSessionMode.endAt
-                                      ? computedEndsAt
-                                      : null,
-                                  frictionOverride: presetFriction,
-                                );
-                                if (!started) return;
+                        if (!context.mounted) return;
+                        final started = await gateController.startSession(
+                          context: context,
+                          policyId: policy.id,
+                          duration: _mode == _StartSessionMode.duration
+                              ? Duration(minutes: _minutes.toInt())
+                              : null,
+                          endsAt: _mode == _StartSessionMode.endAt
+                              ? computedEndsAt
+                              : null,
+                          frictionOverride: presetFriction,
+                        );
+                        if (!started) return;
+                        if (!context.mounted) return;
 
-                                final session = ref
-                                    .read(activeFocusSessionProvider)
-                                    .valueOrNull;
-                                if (session != null && session.isActive) {
-                                  final unlockController = ref.read(
-                                    activeSessionTaskUnlockControllerProvider
-                                        .notifier,
-                                  );
-                                  if (requiredUnlockCount > 0) {
-                                    await unlockController.safeSetForActiveSession(
-                                      context: context,
-                                      session: session,
-                                      ymd: ymd,
-                                      requiredCount: requiredUnlockCount,
-                                      requiredTaskIds: unlockTaskIds,
-                                    );
-                                  } else {
-                                    // Preset says none: ensure we clear any stale config.
-                                    await unlockController.clear();
-                                  }
-                                }
+                        final session =
+                            ref.read(activeFocusSessionProvider).valueOrNull;
+                        if (session != null && session.isActive) {
+                          final unlockController = ref.read(
+                            activeSessionTaskUnlockControllerProvider.notifier,
+                          );
+                          if (requiredUnlockCount > 0) {
+                            if (!context.mounted) return;
+                            await unlockController.safeSetForActiveSession(
+                              context: context,
+                              session: session,
+                              ymd: ymd,
+                              requiredCount: requiredUnlockCount,
+                              requiredTaskIds: unlockTaskIds,
+                            );
+                          } else {
+                            await unlockController.clear();
+                          }
+                        }
 
-                                if (!context.mounted) return;
-                                await ref
-                                    .read(todayControllerProvider(ymd).notifier)
-                                    .enableFocusModeAndSelectDefaultTask();
-                                if (settings.dumbPhoneAutoStart25mTimebox) {
-                                  await ref
-                                      .read(todayTimeboxControllerProvider(ymd)
-                                          .notifier)
-                                      .queuePendingAutoStart25m();
-                                }
-                                if (!context.mounted) return;
-                                context.go('/today?ymd=$ymd');
-                              },
-                    icon: const Icon(Icons.play_arrow),
-                    label: Text(
-                      policies.isEmpty ? 'Create a policy' : 'Start session',
-                    ),
-                  ),
+                        if (!context.mounted) return;
+                        await ref
+                            .read(todayControllerProvider(ymd).notifier)
+                            .enableFocusModeAndSelectDefaultTask();
+                        if (settings.dumbPhoneAutoStart25mTimebox) {
+                          await ref
+                              .read(todayTimeboxControllerProvider(ymd).notifier)
+                              .queuePendingAutoStart25m();
+                        }
+                        if (!context.mounted) return;
+                        context.go('/today?ymd=$ymd');
+                      },
+                icon: const Icon(Icons.play_arrow, size: 18),
+                label: Text(
+                  policies.isEmpty ? 'Create a policy' : 'Start session',
                 ),
-                if (widget.onTestCelebration != null) ...[
-                  Gap.w12,
-                  OutlinedButton.icon(
-                    onPressed: widget.onTestCelebration,
-                    icon: const Text(
-                      'W',
-                      style: TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    label: const Text('Test'),
-                  ),
-                ],
-              ],
+              ),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 
@@ -871,7 +830,6 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
     required Duration duration,
     required FocusFrictionSettings friction,
     required int requiredUnlockTaskCount,
-    required bool requireCardToEndEarly,
     required bool requireSelfieToEndEarly,
   }) async {
     final isIOS = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
@@ -933,12 +891,6 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                       'Because “Complete tasks to unlock” is enabled, you must complete $requiredUnlockTaskCount selected tasks before the early-exit hold will work.',
                     ),
                   ],
-                  if (requireCardToEndEarly) ...[
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Because “Require NFC card to end early” is enabled, you’ll also need to scan your paired card.',
-                    ),
-                  ],
                   if (requireSelfieToEndEarly) ...[
                     const SizedBox(height: 6),
                     const Text(
@@ -971,43 +923,394 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
   }
 }
 
+class RemoteStartOnIPhoneCard extends ConsumerStatefulWidget {
+  const RemoteStartOnIPhoneCard({super.key});
+
+  @override
+  ConsumerState<RemoteStartOnIPhoneCard> createState() =>
+      _RemoteStartOnIPhoneCardState();
+}
+
+class _RemoteStartOnIPhoneCardState
+    extends ConsumerState<RemoteStartOnIPhoneCard> {
+  int _minutes = 25;
+  String? _policyId;
+  bool _sending = false;
+  int? _iosDeviceCount;
+  Object? _loadError;
+
+  String? _lastCommandId;
+  String? _lastCommandStatus; // pending|processing|completed|failed|expired
+  String? _lastCommandError;
+  String? _lastCommandType; // start|stop
+  DateTime? _lastCommandCreatedAt;
+  Timer? _commandPollTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadDevices());
+  }
+
+  @override
+  void dispose() {
+    _commandPollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadDevices() async {
+    final client = ref.read(supabaseProvider).client;
+    final auth = ref.read(authStateProvider).valueOrNull;
+    if (client == null || auth == null || !auth.isSignedIn || auth.isDemo) {
+      if (!mounted) return;
+      setState(() {
+        _iosDeviceCount = null;
+        _loadError = null;
+      });
+      return;
+    }
+
+    try {
+      final rows = await client
+          .from('user_devices')
+          .select('id')
+          .eq('platform', 'ios')
+          .eq('push_provider', 'apns');
+      if (!mounted) return;
+      setState(() {
+        _iosDeviceCount = (rows as List).length;
+        _loadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _iosDeviceCount = null;
+        _loadError = e;
+      });
+    }
+  }
+
+  String? _requireUserId(SupabaseClient client) {
+    final uid = client.auth.currentUser?.id;
+    if (uid == null || uid.isEmpty) return null;
+    return uid;
+  }
+
+  Future<void> _sendCommand({required String command}) async {
+    final client = ref.read(supabaseProvider).client;
+    final auth = ref.read(authStateProvider).valueOrNull;
+    if (client == null || auth == null || !auth.isSignedIn || auth.isDemo) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              command == 'stop'
+                  ? 'Sign in to stop Focus on your iPhone.'
+                  : 'Sign in to start Focus on your iPhone.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    final uid = _requireUserId(client);
+    if (uid == null) return;
+
+    setState(() => _sending = true);
+    try {
+      final insertPayload = <String, Object?>{
+        'user_id': uid,
+        'command': command,
+        'source_platform': 'macos',
+        'target_platform': 'ios',
+      };
+
+      if (command == 'start') {
+        insertPayload['duration_minutes'] = _minutes;
+      }
+
+      final effectivePolicyId = _policyId?.trim();
+      if (effectivePolicyId != null && effectivePolicyId.isNotEmpty) {
+        insertPayload['policy_id'] = effectivePolicyId;
+      }
+
+      final inserted = await client
+          .from('remote_focus_commands')
+          .insert(insertPayload)
+          .select('id, status, command, error_message, created_at')
+          .single();
+
+      final id = (inserted['id'] as String?)?.trim();
+      final status = (inserted['status'] as String?)?.trim();
+      final cmd = (inserted['command'] as String?)?.trim();
+      final err = inserted['error_message'] as String?;
+      final createdAtRaw = inserted['created_at'] as String?;
+
+      if (mounted) {
+        setState(() {
+          _lastCommandId = id;
+          _lastCommandStatus = status;
+          _lastCommandType = cmd;
+          _lastCommandError = err;
+          _lastCommandCreatedAt =
+              createdAtRaw != null ? DateTime.tryParse(createdAtRaw)?.toLocal() : null;
+        });
+      }
+
+      if (id != null && id.isNotEmpty) {
+        _startPollingCommandStatus(id);
+      }
+
+      await _loadDevices();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              command == 'stop'
+                  ? 'Sent “Stop Focus” to iPhone (waiting for device)…'
+                  : 'Sent “Start Focus” to iPhone (waiting for device)…',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send remote command: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _sendStartCommand() async {
+    await _sendCommand(command: 'start');
+  }
+
+  Future<void> _sendStopCommand() async {
+    await _sendCommand(command: 'stop');
+  }
+
+  void _startPollingCommandStatus(String id) {
+    _commandPollTimer?.cancel();
+    // Poll fairly frequently so the macOS UI feels responsive after sending,
+    // but stop automatically once the command is done.
+    _commandPollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(_pollCommandStatusOnce(id));
+    });
+    // Also run once immediately.
+    unawaited(_pollCommandStatusOnce(id));
+  }
+
+  Future<void> _pollCommandStatusOnce(String id) async {
+    if (!mounted) return;
+    final client = ref.read(supabaseProvider).client;
+    final auth = ref.read(authStateProvider).valueOrNull;
+    if (client == null || auth == null || !auth.isSignedIn || auth.isDemo) {
+      _commandPollTimer?.cancel();
+      return;
+    }
+
+    try {
+      final row = await client
+          .from('remote_focus_commands')
+          .select('status, command, error_message, created_at')
+          .eq('id', id)
+          .maybeSingle();
+      if (row == null || !mounted) return;
+
+      final nextStatus = (row['status'] as String?)?.trim();
+      final nextCommand = (row['command'] as String?)?.trim();
+      final nextError = row['error_message'] as String?;
+      final createdAtRaw = row['created_at'] as String?;
+      final nextCreatedAt =
+          createdAtRaw != null ? DateTime.tryParse(createdAtRaw)?.toLocal() : null;
+
+      final prevStatus = _lastCommandStatus;
+      setState(() {
+        _lastCommandId = id;
+        _lastCommandStatus = nextStatus;
+        _lastCommandType = nextCommand;
+        _lastCommandError = nextError;
+        _lastCommandCreatedAt = nextCreatedAt;
+      });
+
+      final done = nextStatus == 'completed' ||
+          nextStatus == 'failed' ||
+          nextStatus == 'expired';
+      if (done) {
+        _commandPollTimer?.cancel();
+
+        // Only notify on terminal transitions to avoid snackbar spam.
+        if (prevStatus != nextStatus && mounted) {
+          final msg = switch (nextStatus) {
+            'completed' => nextCommand == 'stop'
+                ? 'iPhone stopped Focus.'
+                : 'iPhone started Focus.',
+            'failed' => 'iPhone failed: ${nextError ?? 'unknown error'}',
+            'expired' => 'Remote command expired before iPhone processed it.',
+            _ => null,
+          };
+          if (msg != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(msg)),
+            );
+          }
+        }
+      }
+    } catch (_) {
+      // Ignore polling errors; keep polling for a bit.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final policies = ref.watch(focusPolicyListProvider);
+    final policyItems = policies.valueOrNull ?? const <FocusPolicy>[];
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.s12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Start on iPhone',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Gap.h8,
+            Text(
+              'Sends a silent push to your iPhone so it can start Dumb Phone Mode.\n'
+              'Your iPhone must have completed Focus onboarding at least once.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            Gap.h12,
+            Row(
+              children: [
+                SizedBox(
+                  width: 140,
+                  child: DropdownButtonFormField<int>(
+                    value: _minutes,
+                    items: const [
+                      DropdownMenuItem(value: 15, child: Text('15 min')),
+                      DropdownMenuItem(value: 25, child: Text('25 min')),
+                      DropdownMenuItem(value: 45, child: Text('45 min')),
+                      DropdownMenuItem(value: 60, child: Text('60 min')),
+                    ],
+                    onChanged: _sending
+                        ? null
+                        : (v) => setState(() => _minutes = v ?? 25),
+                    decoration: const InputDecoration(labelText: 'Duration'),
+                  ),
+                ),
+                Gap.w12,
+                FilledButton.icon(
+                  onPressed: _sending ? null : _sendStartCommand,
+                  icon: const Icon(Icons.send),
+                  label: Text(_sending ? 'Sending…' : 'Start on iPhone'),
+                ),
+                Gap.w12,
+                OutlinedButton.icon(
+                  onPressed: _sending ? null : _sendStopCommand,
+                  icon: const Icon(Icons.stop_circle_outlined),
+                  label: const Text('Stop'),
+                ),
+              ],
+            ),
+            Gap.h8,
+            DropdownButtonFormField<String?>(
+              value: _policyId,
+              items: [
+                const DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text('Auto (use iPhone default)'),
+                ),
+                ...policyItems.map(
+                  (p) => DropdownMenuItem<String?>(
+                    value: p.id,
+                    child: Text(p.name),
+                  ),
+                ),
+              ],
+              onChanged: _sending
+                  ? null
+                  : (v) => setState(() {
+                        _policyId = v;
+                      }),
+              decoration: const InputDecoration(
+                labelText: 'Policy (optional)',
+                helperText:
+                    'Note: policies are currently stored per-device. If the ID does not exist on iPhone, it will fall back to the first policy.',
+              ),
+            ),
+            Gap.h8,
+            if (_lastCommandId != null && _lastCommandId!.isNotEmpty)
+              Text(
+                [
+                  'Last: ${_lastCommandType ?? 'command'}',
+                  if (_lastCommandStatus != null && _lastCommandStatus!.isNotEmpty)
+                    'status=${_lastCommandStatus!}',
+                  if (_lastCommandCreatedAt != null)
+                    'at ${DateFormat.Hm().format(_lastCommandCreatedAt!)}',
+                  if ((_lastCommandError ?? '').trim().isNotEmpty)
+                    'error=${_lastCommandError!.trim()}',
+                ].join(' • '),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            if (_loadError != null)
+              Text(
+                'Device check failed: $_loadError',
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+              )
+            else if (_iosDeviceCount != null)
+              Text(
+                _iosDeviceCount == 0
+                    ? 'No iOS devices registered yet (open the iPhone app once).'
+                    : 'iOS devices registered: $_iosDeviceCount',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 enum _StartSessionMode {
   duration,
   endAt,
 }
 
 enum _SessionPreset {
-  light,
-  normal,
-  extreme;
+  zero,
+  one,
+  two,
+  three;
 
   static FocusFrictionSettings frictionFor(_SessionPreset preset) {
-    // v1 sensible defaults (independent of policy): consistent mental model.
-    // Light: low friction, still not instant.
-    // Normal: current defaults.
-    // Extreme: higher friction and (optionally) no emergency exceptions.
-    return switch (preset) {
-      _SessionPreset.light => const FocusFrictionSettings(
-          holdToUnlockSeconds: 2,
-          unlockDelaySeconds: 5,
-          emergencyUnlockMinutes: 3,
-          maxEmergencyUnlocksPerSession: 1,
-        ),
-      _SessionPreset.normal => FocusFrictionSettings.defaults,
-      _SessionPreset.extreme => const FocusFrictionSettings(
-          holdToUnlockSeconds: 5,
-          unlockDelaySeconds: 20,
-          emergencyUnlockMinutes: 3,
-          maxEmergencyUnlocksPerSession: 0,
-        ),
-    };
+    // Use normal friction settings for all presets, with task count being the differentiator.
+    return FocusFrictionSettings.defaults;
   }
 
   static int requiredUnlockTaskCount(_SessionPreset preset) {
     return switch (preset) {
-      _SessionPreset.light => 0,
-      _SessionPreset.normal => 2,
-      _SessionPreset.extreme => 3,
+      _SessionPreset.zero => 0,
+      _SessionPreset.one => 1,
+      _SessionPreset.two => 2,
+      _SessionPreset.three => 3,
     };
   }
 }
@@ -1035,97 +1338,108 @@ class _UnlockToEndEarlySection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final today = ref.watch(todayControllerProvider(ymd));
     final byId = <String, TodayTask>{for (final t in today.tasks) t.id: t};
 
     final remaining = (requiredCount - doneCount).clamp(0, requiredCount);
     final blocked = remaining > 0 || missingCount > 0 || requiredTaskIds.length != requiredCount;
 
-    return Card(
-      color: blocked
-          ? Theme.of(context).colorScheme.surfaceContainerHighest
-          : null,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpace.s12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(),
+        Gap.h8,
+        Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Unlock to end early',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
+            Expanded(
+              child: Text(
+                'Tasks to unlock ($doneCount/$requiredCount)',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
-                TextButton(
-                  onPressed: onEdit,
-                  child: const Text('Edit'),
-                ),
-              ],
-            ),
-            Text(
-              '$doneCount/$requiredCount done',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            Text(
-              'Tap a task to mark it complete',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
-            if (missingCount > 0) ...[
-              Gap.h8,
-              Text(
-                '$missingCount missing task${missingCount == 1 ? '' : 's'} (deleted or moved). Replace them to unlock.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                      fontWeight: FontWeight.w700,
-                    ),
               ),
-            ],
-            Gap.h8,
-            for (final id in requiredTaskIds) ...[
-              Builder(
-                builder: (context) {
-                  final t = byId[id];
-                  if (t == null) {
-                    return ListTile(
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.error_outline),
-                      title: const Text('Missing task'),
-                      subtitle: Text('ID: $id'),
-                    );
-                  }
-                  return ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      t.completed
-                          ? Icons.check_circle
-                          : Icons.radio_button_unchecked,
-                    ),
-                    title: Text(t.title),
-                    subtitle: Text(
-                      t.type == TodayTaskType.mustWin ? 'Must‑Win' : 'Nice‑to‑Do',
-                    ),
-                    onTap: () => onToggleTask(t.id),
-                  );
-                },
-              ),
-            ],
-            if (blocked) ...[
-              Gap.h12,
-              FilledButton.icon(
-                onPressed: onGoToToday,
-                icon: const Icon(Icons.today),
-                label: const Text('Go to Today to complete tasks'),
-              ),
-            ],
+            ),
+            TextButton(
+              onPressed: onEdit,
+              child: const Text('Edit'),
+            ),
           ],
         ),
-      ),
+        if (missingCount > 0) ...[
+          Gap.h4,
+          Text(
+            '$missingCount task${missingCount == 1 ? '' : 's'} missing',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.error,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+        Gap.h8,
+        for (final id in requiredTaskIds)
+          Builder(
+            builder: (context) {
+              final t = byId[id];
+              if (t == null) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpace.s4),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, size: 20, color: scheme.error),
+                      Gap.w8,
+                      Text(
+                        'Missing task',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return InkWell(
+                onTap: () => onToggleTask(t.id),
+                borderRadius: BorderRadius.circular(kRadiusSmall),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: AppSpace.s8,
+                    horizontal: AppSpace.s4,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        t.completed
+                            ? Icons.check_circle
+                            : Icons.radio_button_unchecked,
+                        size: 20,
+                        color: t.completed ? scheme.primary : scheme.onSurfaceVariant,
+                      ),
+                      Gap.w8,
+                      Expanded(
+                        child: Text(
+                          t.title,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            decoration: t.completed ? TextDecoration.lineThrough : null,
+                            color: t.completed ? scheme.onSurfaceVariant : null,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        if (blocked) ...[
+          Gap.h12,
+          FilledButton(
+            onPressed: onGoToToday,
+            child: const Text('Go to Today'),
+          ),
+        ],
+      ],
     );
   }
 }

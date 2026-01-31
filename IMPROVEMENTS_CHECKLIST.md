@@ -394,7 +394,96 @@ This checklist turns the current scaffold into a **professional, personal-feelin
 
 ---
 
-## Suggested implementation order (if you want the fastest “feels like an app” win)
+---
+
+## 12) iOS Custom Shield with Task Callout (Dumb Phone Mode Enhancement)
+
+> **Status**: 🔮 Future — Research Complete  
+> **PRD**: [`docs/IOS_CUSTOM_SHIELD_TASK_CALLOUT_PRD.md`](docs/IOS_CUSTOM_SHIELD_TASK_CALLOUT_PRD.md)  
+> **Complexity**: High (requires native iOS extension targets)
+
+When users try to open a blocked app during Dumb Phone mode, show a **cheeky, personalized shield** with one of their remaining tasks instead of the generic iOS "App Blocked" screen.
+
+**Example:**
+```
+🔥 Nice try, champ.
+
+You could be crushing:
+✓ Submit the Q4 report
+
+Future you will thank present you. 💪
+
+[ Open Win The Year ]
+     [ Okay fine ]
+```
+
+### 12.1 Create iOS Shield Configuration Extension
+- [ ] **Goal**: Custom shield UI that shows task + cheeky messaging
+- [ ] **Acceptance criteria**:
+  - [ ] New Xcode target: `WinTheYearShieldConfig` (Shield Configuration Extension)
+  - [ ] Bundle ID: `com.wintheyear.winFlutter.dev.ShieldConfig`
+  - [ ] Added to App Group: `group.com-wintheyear-winFlutter-dev`
+  - [ ] Family Controls capability enabled
+  - [ ] Shield displays custom title, subtitle with task, styled buttons
+- [ ] **Likely files**: `ios/WinTheYearShieldConfig/**`
+
+### 12.2 Create iOS Shield Action Extension
+- [ ] **Goal**: Handle button taps on shield to open app
+- [ ] **Acceptance criteria**:
+  - [ ] New Xcode target: `WinTheYearShieldAction` (Shield Action Extension)
+  - [ ] "Open Win The Year" triggers navigation to app
+  - [ ] URL scheme `wintheyear://today` registered and handled
+- [ ] **Likely files**: `ios/WinTheYearShieldAction/**`, `ios/Runner/Info.plist`
+
+### 12.3 Shared data model for App Group
+- [ ] **Goal**: Extensions can read task data written by main app
+- [ ] **Acceptance criteria**:
+  - [ ] `ShieldConfig` model shared between Runner + extensions
+  - [ ] Stores: sessionId, tasks, messages (headlines, intros, closers)
+  - [ ] Messages rotate by hour for freshness
+- [ ] **Likely files**: `ios/Shared/ShieldTaskData.swift`
+
+### 12.4 Flutter → Native sync for shield data
+- [ ] **Goal**: Keep shield content up-to-date with task state
+- [ ] **Acceptance criteria**:
+  - [ ] New method channel: `syncShieldConfig`
+  - [ ] Called when Dumb Phone session starts
+  - [ ] Called when any task completion changes
+  - [ ] Called (with null) when session ends
+- [ ] **Likely files**: 
+  - `lib/platform/restriction_engine/restriction_engine.dart`
+  - `lib/platform/restriction_engine/restriction_engine_channel.dart`
+  - `ios/Runner/RestrictionEnginePlugin.swift`
+
+### 12.5 Deep link handling for shield → app navigation
+- [ ] **Goal**: "Open Win The Year" button takes user to Today screen
+- [ ] **Acceptance criteria**:
+  - [ ] URL scheme `wintheyear://` registered in Info.plist
+  - [ ] `wintheyear://today` navigates to Today screen
+  - [ ] Works from notification (workaround for extension limitation)
+- [ ] **Likely files**: `ios/Runner/Info.plist`, `ios/Runner/SceneDelegate.swift`, `lib/app/router.dart`
+
+### 12.6 Testing on physical device
+- [ ] **Goal**: Verify shield appears with custom content
+- [ ] **Acceptance criteria**:
+  - [ ] Tested on physical iOS device (Simulator won't show custom shields)
+  - [ ] Tested with TestFlight/Release build (Debug may not show shields)
+  - [ ] Task title displays correctly
+  - [ ] Messages rotate throughout day
+  - [ ] "Open Win The Year" works
+  - [ ] Shield updates when task completed in app
+- [ ] **Implementation notes**:
+  - [ ] Shield UI may cache briefly — toggle shields to see updates
+  - [ ] Extensions can't directly open app — use local notification workaround
+
+### Prerequisites checklist
+- [ ] Apple Developer account with Family Controls capability
+- [ ] Physical iOS device for testing
+- [ ] Understanding of iOS App Extension architecture
+
+---
+
+## Suggested implementation order (if you want the fastest "feels like an app" win)
 
 - [ ] **A (UI foundation)**: 1.1 → 1.5
 - [ ] **B (Navigation)**: 2.1 → 2.3
@@ -404,5 +493,6 @@ This checklist turns the current scaffold into a **professional, personal-feelin
 - [ ] **F (Settings/Auth polish)**: 6.1 → 7.2
 - [ ] **G (Assistant)**: 8.1 → 8.2
 - [ ] **H (Hardening)**: 9.1 → 11.2
+- [ ] **I (iOS Shield Enhancement)**: 12.1 → 12.6 *(requires native iOS work)*
 
 

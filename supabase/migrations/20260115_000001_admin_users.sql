@@ -36,6 +36,10 @@ using (
 -- This can be used in RLS policies for other tables.
 -- Marked as SECURITY DEFINER so it can bypass RLS to check admin status.
 -- Two overloads: one that takes a user_id, and one that uses the current user's id.
+-- Drop first so we can replace any existing version that had different parameter defaults.
+-- CASCADE drops dependent RLS policies (e.g. from admin_user_management); they are recreated in the next migration.
+drop function if exists public.is_admin(uuid) cascade;
+drop function if exists public.is_admin() cascade;
 create or replace function public.is_admin(user_id_param uuid)
 returns boolean
 language sql

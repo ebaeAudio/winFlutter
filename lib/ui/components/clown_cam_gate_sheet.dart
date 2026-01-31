@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../spacing.dart';
@@ -89,32 +90,36 @@ class _ClownCamGateSheetState extends State<ClownCamGateSheet> {
       _initError = null;
     });
 
+    // Capture theme before async operations
+    final theme = Theme.of(context);
+
     try {
       final shot = await c.takePicture();
       final bytes = await shot.readAsBytes();
-      final pngBytes = await _renderOverlayedPng(context, bytes);
+      final pngBytes = await _renderOverlayedPng(theme, bytes);
       await _saveClownPhoto(pngBytes);
 
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Saved clown cam photo on this device.')),
+        const SnackBar(content: Text('Saved to your Photo Library.')),
       );
       Navigator.of(context).pop(true);
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not save clown cam photo: $e')),
       );
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-      });
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
     }
   }
 
   Future<Uint8List> _renderOverlayedPng(
-    BuildContext context,
+    ThemeData theme,
     Uint8List bytes,
   ) async {
     final base = await _decodeImage(bytes);
@@ -123,7 +128,7 @@ class _ClownCamGateSheetState extends State<ClownCamGateSheet> {
     final size = Size(base.width.toDouble(), base.height.toDouble());
 
     canvas.drawImage(base, Offset.zero, Paint());
-    _ClownOverlayPainter(Theme.of(context)).paint(canvas, size);
+    _ClownOverlayPainter(theme).paint(canvas, size);
 
     final picture = recorder.endRecording();
     final out = await picture.toImage(base.width, base.height);
@@ -140,11 +145,33 @@ class _ClownCamGateSheetState extends State<ClownCamGateSheet> {
     return completer.future;
   }
 
-  Future<File> _saveClownPhoto(Uint8List bytes) async {
-    final dir = await getApplicationDocumentsDirectory();
+  /// Saves the clown cam photo to the user's Photo Library (iOS/Android).
+  /// Falls back to app documents directory on unsupported platforms.
+  Future<void> _saveClownPhoto(Uint8List bytes) async {
+    // First write to a temp file (gal needs a file path)
+    final dir = await getTemporaryDirectory();
     final stamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final file = File('${dir.path}/clown_cam_$stamp.png');
-    return file.writeAsBytes(bytes, flush: true);
+    final tempFile = File('${dir.path}/clown_cam_$stamp.png');
+    await tempFile.writeAsBytes(bytes, flush: true);
+
+    try {
+      // Request add-only permission (toAlbum: false avoids the "Select Photos" dialog on iOS 14+)
+      final hasAccess = await Gal.hasAccess();
+      if (!hasAccess) {
+        final granted = await Gal.requestAccess();
+        if (!granted) {
+          throw StateError('Photo Library access denied.');
+        }
+      }
+
+      // Save to Camera Roll (no album to avoid needing full photo library access)
+      await Gal.putImage(tempFile.path);
+    } finally {
+      // Clean up temp file
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+    }
   }
 
   @override

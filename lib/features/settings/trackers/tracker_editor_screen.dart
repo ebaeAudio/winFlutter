@@ -9,6 +9,7 @@ import '../../../ui/components/reachability_fab_cluster.dart';
 import '../../../ui/nav_shell.dart';
 import '../../../ui/components/section_header.dart';
 import '../../../ui/spacing.dart';
+import '../../../utils/iterable_extensions.dart';
 import 'trackers_controller.dart';
 
 class TrackerEditorScreen extends ConsumerStatefulWidget {
@@ -494,8 +495,4 @@ class _ItemEditor extends StatelessWidget {
       ),
     );
   }
-}
-
-extension<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

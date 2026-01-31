@@ -400,8 +400,8 @@ class _QuickCaptureDialogState extends State<QuickCaptureDialog> {
                 // ─────────────────────────────────────────────────────────────
                 // Tips
                 // ─────────────────────────────────────────────────────────────
-                Padding(
-                  padding: const EdgeInsets.symmetric(
+                const Padding(
+                  padding: EdgeInsets.symmetric(
                     horizontal: AppSpace.s16,
                   ),
                   child: Wrap(

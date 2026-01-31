@@ -80,6 +80,20 @@ ThemeMode _themeModeFromString(String? raw) {
   };
 }
 
+/// Design system radius constants.
+/// See `lib/ui/design_system.dart` for documentation.
+///
+/// - `kRadiusSmall` (8px): Pills, tags, small buttons
+/// - `kRadiusMedium` (12px): Cards, containers, modals, inputs
+const double kRadiusSmall = 8;
+const double kRadiusMedium = 12;
+
+/// Design system elevation constants.
+/// - `kElevationNone` (0): Default flat surfaces
+/// - `kElevationRaised` (2): Floating elements (modals, FABs)
+const double kElevationNone = 0;
+const double kElevationRaised = 2;
+
 ThemeData themeFor(AppThemeMode mode, Brightness brightness) {
   final seed = seedFor(mode);
 
@@ -93,7 +107,10 @@ ThemeData themeFor(AppThemeMode mode, Brightness brightness) {
         : const Color(0xFFF7F7F9),
   );
 
-  final radius = BorderRadius.circular(16);
+  // Design system radii — see design_system.dart
+  final radiusMedium = BorderRadius.circular(kRadiusMedium);
+  final radiusSmall = BorderRadius.circular(kRadiusSmall);
+
   final baseText = Typography.material2021().englishLike;
   final textTheme = baseText
       .copyWith(
@@ -116,8 +133,8 @@ ThemeData themeFor(AppThemeMode mode, Brightness brightness) {
       centerTitle: false,
       backgroundColor: scheme.surface,
       foregroundColor: scheme.onSurface,
-      elevation: 0,
-      scrolledUnderElevation: 0,
+      elevation: kElevationNone,
+      scrolledUnderElevation: kElevationNone,
     ),
     dividerTheme: DividerThemeData(
       color: scheme.outlineVariant
@@ -126,11 +143,11 @@ ThemeData themeFor(AppThemeMode mode, Brightness brightness) {
       space: 1,
     ),
     cardTheme: CardTheme(
-      elevation: 0,
+      elevation: kElevationNone,
       color: scheme.surfaceContainerHighest
           .withOpacity(brightness == Brightness.dark ? 0.35 : 0.7),
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: radius),
+      shape: RoundedRectangleBorder(borderRadius: radiusMedium),
       margin: EdgeInsets.zero,
     ),
     inputDecorationTheme: InputDecorationTheme(
@@ -144,16 +161,16 @@ ThemeData themeFor(AppThemeMode mode, Brightness brightness) {
       helperStyle: TextStyle(color: scheme.onSurfaceVariant.withOpacity(0.90)),
       errorStyle: TextStyle(color: scheme.error),
       border: OutlineInputBorder(
-          borderRadius: radius,
+          borderRadius: radiusMedium,
           borderSide: BorderSide(color: scheme.outlineVariant)),
       enabledBorder: OutlineInputBorder(
-          borderRadius: radius,
+          borderRadius: radiusMedium,
           borderSide: BorderSide(color: scheme.outlineVariant)),
       focusedBorder: OutlineInputBorder(
-        borderRadius: radius,
+        borderRadius: radiusMedium,
         borderSide: BorderSide(color: scheme.primary, width: 2),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     ),
     textSelectionTheme: TextSelectionThemeData(
       cursorColor: scheme.primary,
@@ -163,29 +180,41 @@ ThemeData themeFor(AppThemeMode mode, Brightness brightness) {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size(44, 48),
-        shape: RoundedRectangleBorder(borderRadius: radius),
+        minimumSize: const Size(44, 44),
+        shape: RoundedRectangleBorder(borderRadius: radiusSmall),
         textStyle: const TextStyle(fontWeight: FontWeight.w700),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(44, 48),
-        shape: RoundedRectangleBorder(borderRadius: radius),
+        minimumSize: const Size(44, 44),
+        shape: RoundedRectangleBorder(borderRadius: radiusSmall),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        minimumSize: const Size(44, 44),
       ),
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
         visualDensity: VisualDensity.standard,
         shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(borderRadius: radius)),
+            RoundedRectangleBorder(borderRadius: radiusSmall)),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: scheme.inverseSurface,
       contentTextStyle: TextStyle(color: scheme.onInverseSurface),
-      shape: RoundedRectangleBorder(borderRadius: radius),
+      shape: RoundedRectangleBorder(borderRadius: radiusMedium),
+    ),
+    chipTheme: ChipThemeData(
+      shape: RoundedRectangleBorder(borderRadius: radiusSmall),
+    ),
+    listTileTheme: const ListTileThemeData(
+      minVerticalPadding: 8,
+      contentPadding: EdgeInsets.symmetric(horizontal: 16),
     ),
   );
 }

@@ -27,6 +27,10 @@ int notificationIdForFocusSession(String sessionId) {
   return raw & 0x7fffffff;
 }
 
+/// Notification ID used for the daily morning prompt (8:45 AM).
+/// Kept separate from focus session IDs so we can cancel/reschedule it.
+const int morningPromptNotificationId = 1;
+
 class NotificationService {
   NotificationService();
 
@@ -34,6 +38,11 @@ class NotificationService {
   static const String _channelName = 'Focus sessions';
   static const String _channelDescription =
       'Notifications when a Dumb Phone session completes.';
+
+  static const String _morningChannelId = 'morning_reminder';
+  static const String _morningChannelName = 'Morning reminder';
+  static const String _morningChannelDescription =
+      'Daily prompt to open the app.';
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -73,7 +82,7 @@ class NotificationService {
       },
     );
 
-    // Android channel.
+    // Android channels.
     final android = _plugin.resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin>();
     if (android != null) {
@@ -82,6 +91,14 @@ class NotificationService {
           _channelId,
           _channelName,
           description: _channelDescription,
+          importance: Importance.high,
+        ),
+      );
+      await android.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _morningChannelId,
+          _morningChannelName,
+          description: _morningChannelDescription,
           importance: Importance.high,
         ),
       );
@@ -177,6 +194,66 @@ class NotificationService {
 
   Future<void> cancel(int notificationId) async {
     await _plugin.cancel(notificationId);
+  }
+
+  /// Schedules a one-time notification for the next 8:45 AM (local time).
+  /// Call at startup so the user gets a daily morning prompt. After they open
+  /// the app, the next cold start will schedule the following 8:45 AM.
+  Future<void> scheduleMorningPrompt() async {
+    final ok = await _ensurePermissions();
+    if (!ok) return;
+
+    tz.TZDateTime? when;
+    try {
+      when = _next845AM(tz.local);
+    } catch (_) {
+      when = null;
+    }
+    if (when == null) return;
+
+    final now = tz.TZDateTime.now(tz.local);
+    if (!when.isAfter(now)) return;
+
+    await _plugin.cancel(morningPromptNotificationId);
+    await _plugin.zonedSchedule(
+      morningPromptNotificationId,
+      'Win the Year',
+      'Time to plan your day — open the app to get started.',
+      when,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          _morningChannelId,
+          _morningChannelName,
+          channelDescription: _morningChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+          playSound: true,
+        ),
+        iOS: DarwinNotificationDetails(presentSound: true),
+        macOS: DarwinNotificationDetails(presentSound: true),
+      ),
+      payload: '/today',
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  /// Returns the next occurrence of 8:45 AM in the given timezone.
+  tz.TZDateTime _next845AM(tz.Location location) {
+    final now = tz.TZDateTime.now(location);
+    var when = tz.TZDateTime(
+      location,
+      now.year,
+      now.month,
+      now.day,
+      8,
+      45,
+    );
+    if (!when.isAfter(now)) {
+      when = when.add(const Duration(days: 1));
+    }
+    return when;
   }
 
   static String? _routeFromPayload(String? payload) {

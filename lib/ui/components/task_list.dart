@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../app/theme.dart';
 import '../spacing.dart';
 
-/// A production-grade list surface for tasks:
-/// - calm Material 3 surface
-/// - subtle dividers (theme-driven)
-/// - clipped ink ripples (good desktop/web hover/press)
+/// A production-grade list surface for tasks.
+///
+/// Design system: Uses `kRadiusMedium` (12px) for container corners.
+/// Uses dividers between items instead of spacing to maintain density.
 class TaskListCard extends StatelessWidget {
   const TaskListCard({
     super.key,
@@ -21,7 +22,7 @@ class TaskListCard extends StatelessWidget {
     if (children.isEmpty) return const SizedBox.shrink();
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(kRadiusMedium),
       child: Card(
         child: Padding(
           padding: padding,
@@ -48,6 +49,7 @@ class TaskListRow extends StatelessWidget {
     required this.onTap,
     this.metadata,
     this.trailing,
+    this.onSecondaryTap,
   });
 
   final String title;
@@ -56,6 +58,10 @@ class TaskListRow extends StatelessWidget {
   final VoidCallback? onTap;
   final Widget? metadata;
   final Widget? trailing;
+
+  /// Called when the user right-clicks (or secondary taps) on the row.
+  /// The [Offset] is the global position of the tap.
+  final void Function(Offset globalPosition)? onSecondaryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -66,10 +72,15 @@ class TaskListRow extends StatelessWidget {
           : theme.colorScheme.onSurface,
     );
 
-    return Material(
-      type: MaterialType.transparency,
-      child: InkWell(
-        onTap: onTap,
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onSecondaryTapUp: onSecondaryTap != null
+          ? (details) => onSecondaryTap!(details.globalPosition)
+          : null,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
         overlayColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.pressed)) {
             return theme.colorScheme.onSurface.withOpacity(0.06);
@@ -100,13 +111,11 @@ class TaskListRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SelectionArea(
-                        child: Text(
-                          title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: titleStyle,
-                        ),
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: titleStyle,
                       ),
                       if (metadata != null) ...[
                         Gap.h4,
@@ -129,6 +138,7 @@ class TaskListRow extends StatelessWidget {
               ],
             ],
           ),
+        ),
         ),
       ),
     );

@@ -36,12 +36,12 @@ class AppScaffold extends ConsumerWidget {
     final oneHandEnabled = settings.oneHandModeEnabled;
     final hand = settings.oneHandModeHand;
 
-    // Using the spacing scale to avoid magic numbers while still producing a
-    // meaningfully "thick" opposing-side gutter.
+    // Screen padding using the design system scale.
     const baseVerticalPadding = AppSpace.s16;
     final baseHorizontalPadding =
         settings.disableHorizontalScreenPadding ? AppSpace.s8 : AppSpace.s16;
-    const preferredGutter = AppSpace.s48 + AppSpace.s24;
+    // One-hand mode gutter: combine s24 + s24 for a meaningful gutter width
+    const preferredGutter = AppSpace.s24 + AppSpace.s24;
 
     final extraLeft =
         oneHandEnabled && hand == OneHandModeHand.right ? preferredGutter : 0.0;

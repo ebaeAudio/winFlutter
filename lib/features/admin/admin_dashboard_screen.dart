@@ -516,11 +516,11 @@ class _UserListItemState extends ConsumerState<_UserListItem> {
                     tooltip: 'Revoke admin access',
                     onPressed: () => _showRevokeDialog(context, ref),
                   )
-                : IconButton(
-                    icon: const Icon(Icons.info_outline),
-                    tooltip: 'You cannot revoke your own admin access',
-                    onPressed: null,
-                  ))
+            : const IconButton(
+                icon: Icon(Icons.info_outline),
+                tooltip: 'You cannot revoke your own admin access',
+                onPressed: null,
+              ))
             : IconButton(
                 icon: const Icon(Icons.add_circle_outline),
                 tooltip: 'Grant admin access',
@@ -613,7 +613,7 @@ class _UserListItemState extends ConsumerState<_UserListItem> {
 
     try {
       await repository.grantAdminAccess(widget.user.userId);
-      if (!mounted) return;
+      if (!context.mounted) return;
 
       // Refresh the user list
       ref.invalidate(adminUserListProvider);
@@ -625,7 +625,7 @@ class _UserListItemState extends ConsumerState<_UserListItem> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       showErrorDialog(
         context,
         title: 'Failed to grant admin access',
@@ -665,7 +665,7 @@ class _UserListItemState extends ConsumerState<_UserListItem> {
 
     try {
       await repository.revokeAdminAccess(widget.user.userId);
-      if (!mounted) return;
+      if (!context.mounted) return;
 
       // Refresh the user list
       ref.invalidate(adminUserListProvider);
@@ -677,7 +677,7 @@ class _UserListItemState extends ConsumerState<_UserListItem> {
         ),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       showErrorDialog(
         context,
         title: 'Failed to revoke admin access',

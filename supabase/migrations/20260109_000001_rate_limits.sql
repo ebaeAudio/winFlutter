@@ -38,7 +38,7 @@ create or replace function public.rate_limit_check(
 returns table (
   ok boolean,
   retry_after_seconds integer,
-  limit integer,
+  "limit" integer,
   remaining integer,
   reset_seconds integer
 )
@@ -58,7 +58,7 @@ begin
   if p_key is null or length(trim(p_key)) = 0 then
     ok := false;
     retry_after_seconds := 1;
-    limit := v_limit;
+    "limit" := v_limit;
     remaining := 0;
     reset_seconds := v_reset_in;
     return next;
@@ -75,7 +75,7 @@ begin
   if v_count > v_limit then
     ok := false;
     retry_after_seconds := greatest(1, v_reset_in);
-    limit := v_limit;
+    "limit" := v_limit;
     remaining := 0;
     reset_seconds := v_reset_in;
     return next;
@@ -84,7 +84,7 @@ begin
 
   ok := true;
   retry_after_seconds := 0;
-  limit := v_limit;
+  "limit" := v_limit;
   remaining := greatest(0, v_limit - v_count);
   reset_seconds := v_reset_in;
   return next;

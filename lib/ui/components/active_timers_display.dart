@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/focus/pomodoro_timer.dart';
-import '../../features/focus/focus_session_controller.dart';
 import '../../features/focus/focus_ticker_provider.dart';
 import '../../features/focus/pomodoro_timer_controller.dart';
+import '../../features/focus/remote_focus_session_provider.dart';
 import '../../features/today/today_timebox_controller.dart';
 import '../spacing.dart';
 
@@ -29,34 +29,6 @@ class ActiveTimersDisplay extends ConsumerWidget {
     return '$y-$m-$d';
   }
 
-  static String _formatDuration(Duration d) {
-    final total = d.inSeconds.clamp(0, 24 * 60 * 60);
-    final hours = total ~/ 3600;
-    final minutes = (total % 3600) ~/ 60;
-    final seconds = total % 60;
-
-    if (hours > 0) {
-      return '${hours}h ${minutes}m';
-    } else if (minutes > 0) {
-      return '${minutes}m ${seconds}s';
-    } else {
-      return '${seconds}s';
-    }
-  }
-
-  static String _formatDurationCompact(Duration d) {
-    final total = d.inSeconds.clamp(0, 24 * 60 * 60);
-    final hours = total ~/ 3600;
-    final minutes = (total % 3600) ~/ 60;
-    final seconds = total % 60;
-
-    if (hours > 0) {
-      return '${hours}:${minutes.toString().padLeft(2, '0')}';
-    } else {
-      return '${minutes}:${seconds.toString().padLeft(2, '0')}';
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.watch(nowTickerProvider).valueOrNull ?? DateTime.now();
@@ -65,7 +37,6 @@ class ActiveTimersDisplay extends ConsumerWidget {
 
     // Watch all timer sources
     final pomodoroTimer = ref.watch(pomodoroTimerControllerProvider);
-    final focusSessionAsync = ref.watch(activeFocusSessionProvider);
     final todayYmd = _formatYmd(now);
     final todayTimer = ref.watch(todayTimeboxControllerProvider(todayYmd));
 
@@ -93,17 +64,18 @@ class ActiveTimersDisplay extends ConsumerWidget {
       ));
     }
 
-    // Focus session
-    final focusSession = focusSessionAsync.valueOrNull;
-    if (focusSession != null && focusSession.isActive) {
-      final remaining = focusSession.plannedEndAt.difference(now);
+    // Focus session (local or remote from another device)
+    final combinedSession = ref.watch(combinedFocusSessionProvider);
+    if (combinedSession != null && combinedSession.isActive) {
+      final remaining = combinedSession.remaining;
       if (remaining > Duration.zero) {
         activeTimers.add(_TimerInfo(
-          label: 'Focus Session',
+          label: combinedSession.displayLabel,
           remaining: remaining,
           isPaused: false,
-          icon: Icons.lock,
+          icon: combinedSession.isRemote ? Icons.phone_iphone : Icons.lock,
           color: scheme.primary,
+          isRemote: combinedSession.isRemote,
         ));
       }
     }
@@ -172,6 +144,7 @@ class _TimerInfo {
     required this.isPaused,
     required this.icon,
     required this.color,
+    this.isRemote = false,
   });
 
   final String label;
@@ -179,6 +152,9 @@ class _TimerInfo {
   final bool isPaused;
   final IconData icon;
   final Color color;
+
+  /// Whether this timer is from a remote device (e.g., iPhone session on Mac).
+  final bool isRemote;
 }
 
 class _TimerItem extends StatelessWidget {
@@ -197,9 +173,9 @@ class _TimerItem extends StatelessWidget {
     final seconds = total % 60;
 
     if (hours > 0) {
-      return '${hours}:${minutes.toString().padLeft(2, '0')}';
+      return '$hours:${minutes.toString().padLeft(2, '0')}';
     } else {
-      return '${minutes}:${seconds.toString().padLeft(2, '0')}';
+      return '$minutes:${seconds.toString().padLeft(2, '0')}';
     }
   }
 

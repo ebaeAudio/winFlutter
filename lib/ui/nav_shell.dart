@@ -20,10 +20,6 @@ class NavShell extends ConsumerWidget {
 
     const destinations = [
       CornerNavBubbleDestination(
-        icon: Icons.workspaces_outline,
-        label: 'Projects',
-      ),
-      CornerNavBubbleDestination(
         icon: Icons.check_circle_outline,
         label: 'Tasks',
       ),
@@ -72,10 +68,6 @@ class NavShell extends ConsumerWidget {
               height: navBarHeight,
               selectedIndex: navigationShell.currentIndex,
               destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.workspaces_outline),
-                  label: 'Projects',
-                ),
                 NavigationDestination(
                   icon: Icon(Icons.check_circle_outline),
                   label: 'Tasks',

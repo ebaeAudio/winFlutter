@@ -29,13 +29,17 @@ enum DashboardSectionId {
   /// can merge safely by appending missing IDs in this order.
   static const List<DashboardSectionId> defaultOrder = [
     DashboardSectionId.date,
-    DashboardSectionId.assistant,
     DashboardSectionId.focus,
     DashboardSectionId.quickAdd,
-    DashboardSectionId.habits,
-    DashboardSectionId.trackers,
     DashboardSectionId.mustWins,
     DashboardSectionId.reflection,
   ];
+
+  /// Section IDs that are no longer shown on the Today screen (hidden from layout).
+  static const Set<DashboardSectionId> hiddenSectionIds = {
+    DashboardSectionId.assistant,
+    DashboardSectionId.habits,
+    DashboardSectionId.trackers,
+  };
 }
 

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../features/today/today_controller.dart';
 import '../features/today/today_models.dart';
+import '../utils/ymd_utils.dart';
 import 'assistant_matching.dart';
 import 'assistant_models.dart';
 
@@ -24,17 +24,9 @@ typedef AssistantConfirm = Future<bool> Function(String title, String message);
 class AssistantExecutor {
   const AssistantExecutor();
 
-  static DateTime? _parseYmd(String ymd) {
-    final parts = ymd.split('-');
-    if (parts.length != 3) return null;
-    final y = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
-    final d = int.tryParse(parts[2]);
-    if (y == null || m == null || d == null) return null;
-    return DateTime(y, m, d);
-  }
+  static DateTime? _parseYmd(String ymd) => parseYmd(ymd);
 
-  static String _ymd(DateTime dt) => DateFormat('yyyy-MM-dd').format(dt);
+  static String _ymd(DateTime dt) => formatYmd(dt);
 
   static String? _matchTaskIdByTitle(List<TodayTask> tasks, String query) {
     return matchTaskIdByTitle(tasks, query);

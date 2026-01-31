@@ -12,7 +12,8 @@ import '../today/today_controller.dart';
 import '../today/today_models.dart';
 import '../../ui/app_scaffold.dart';
 import '../../ui/components/reachability_fab_cluster.dart';
-import '../../ui/components/linear_issue_card.dart';
+import '../../ui/components/linear_issue_header.dart';
+import '../../ui/components/linear_description_block.dart';
 import '../../ui/nav_shell.dart';
 import '../../ui/spacing.dart';
 
@@ -503,128 +504,42 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
             ),
           )
         else ...[
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpace.s16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SelectionArea(
-                    child: Text(
-                      title.isEmpty ? '—' : title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w900),
-                    ),
-                  ),
-                  Gap.h8,
-                  Wrap(
-                    spacing: AppSpace.s8,
-                    runSpacing: AppSpace.s8,
-                    children: [
-                      FilterChip(
-                        label: const Text('Completed'),
-                        selected: task?.completed == true,
-                        onSelected: task == null
-                            ? null
-                            : (v) async {
-                                setState(() => _saveError = null);
-                                try {
-                                  await ref
-                                      .read(
-                                          todayControllerProvider(ymd).notifier)
-                                      .setTaskCompleted(widget.taskId, v);
-                                } catch (e) {
-                                  if (!mounted) return;
-                                  setState(() => _saveError = friendlyError(e));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text(friendlyError(e))),
-                                  );
-                                }
-                              },
+          // For Linear-backed tasks, show Linear header + description first.
+          // For non-Linear tasks, show the regular task header card.
+          if (linearRef != null) ...[
+            Builder(
+              builder: (context) {
+                final repo = ref.watch(linearIssueRepositoryProvider);
+                if (repo == null) {
+                  return _buildLinearSetupCard(context);
+                }
+
+                final issueAsync = ref.watch(
+                    linearIssueByIdentifierProvider(linearRef.identifier));
+                return issueAsync.when(
+                  loading: () => _buildLinearLoadingState(),
+                  error: (e, _) => _buildLinearErrorState(context, e),
+                  data: (issue) {
+                    if (issue == null) {
+                      return _buildLinearNotFoundState(context, linearRef);
+                    }
+                    return _buildLinearTaskContent(
+                      context,
+                      issue: issue,
+                      task: task,
+                      ymd: ymd,
+                      onRefresh: () => ref.invalidate(
+                        linearIssueByIdentifierProvider(linearRef.identifier),
                       ),
-                      FilterChip(
-                        label: const Text('In progress'),
-                        selected:
-                            task?.inProgress == true && task?.completed != true,
-                        onSelected: task == null
-                            ? null
-                            : (v) async {
-                                setState(() => _saveError = null);
-                                try {
-                                  await ref
-                                      .read(
-                                          todayControllerProvider(ymd).notifier)
-                                      .setTaskInProgress(widget.taskId, v);
-                                } catch (e) {
-                                  if (!mounted) return;
-                                  setState(() => _saveError = friendlyError(e));
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text(friendlyError(e))),
-                                  );
-                                }
-                              },
-                      ),
-                      if (task != null)
-                        SegmentedButton<TodayTaskType>(
-                          segments: const [
-                            ButtonSegment(
-                                value: TodayTaskType.mustWin,
-                                label: Text('Must‑Win')),
-                            ButtonSegment(
-                                value: TodayTaskType.niceToDo,
-                                label: Text('Nice‑to‑Do')),
-                          ],
-                          selected: {task.type},
-                          onSelectionChanged: (s) => ref
-                              .read(todayControllerProvider(ymd).notifier)
-                              .moveTaskType(widget.taskId, s.first),
-                        ),
-                      if (task != null) ...[
-                        if ((task.goalYmd ?? '').trim().isEmpty)
-                          ActionChip(
-                            avatar: const Icon(Icons.event),
-                            label: const Text('Add goal date'),
-                            onPressed: (_loading || _saving || ymd.isEmpty)
-                                ? null
-                                : () => _pickGoalDate(
-                                      ymd: ymd,
-                                      taskId: widget.taskId,
-                                      currentGoalYmd: task.goalYmd,
-                                    ),
-                          )
-                        else
-                          InputChip(
-                            avatar: const Icon(Icons.event),
-                            label: Text('Due ${_friendlyDate(task.goalYmd!)}'),
-                            onPressed: (_loading || _saving || ymd.isEmpty)
-                                ? null
-                                : () => _pickGoalDate(
-                                      ymd: ymd,
-                                      taskId: widget.taskId,
-                                      currentGoalYmd: task.goalYmd,
-                                    ),
-                            onDeleted: (_loading || _saving || ymd.isEmpty)
-                                ? null
-                                : () => _clearGoalDate(
-                                      ymd: ymd,
-                                      taskId: widget.taskId,
-                                    ),
-                            deleteIcon: const Icon(Icons.close),
-                          ),
-                      ],
-                      OutlinedButton.icon(
-                        onPressed: () => context.pop(),
-                        icon: const Icon(Icons.close),
-                        label: const Text('Close'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                    );
+                  },
+                );
+              },
             ),
-          ),
+          ] else ...[
+            // Non-Linear task: show regular task header
+            _buildTaskHeaderCard(context, title: title, task: task, ymd: ymd),
+          ],
           if (_saveError != null) ...[
             Gap.h8,
             Text(_saveError!,
@@ -634,118 +549,6 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                     ?.copyWith(color: Theme.of(context).colorScheme.error)),
           ],
           Gap.h16,
-          if (linearRef != null) ...[
-            Builder(
-              builder: (context) {
-                final repo = ref.watch(linearIssueRepositoryProvider);
-                if (repo == null) {
-                  return Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpace.s16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Linear link detected',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w800),
-                          ),
-                          Gap.h8,
-                          const Text(
-                            'Add your Linear API key in Settings to show an issue preview and enable sync.',
-                          ),
-                          Gap.h12,
-                          FilledButton.icon(
-                            onPressed: () => context.go('/settings'),
-                            icon: const Icon(Icons.settings),
-                            label: const Text('Open settings'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                final issueAsync = ref.watch(
-                    linearIssueByIdentifierProvider(linearRef.identifier));
-                return issueAsync.when(
-                  loading: () => const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(AppSpace.s16),
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          Gap.w12,
-                          Text('Loading Linear issue…'),
-                        ],
-                      ),
-                    ),
-                  ),
-                  error: (e, _) => Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpace.s16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Could not load Linear issue.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w800),
-                          ),
-                          Gap.h8,
-                          Text(e.toString(),
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(context).colorScheme.error,
-                                  )),
-                        ],
-                      ),
-                    ),
-                  ),
-                  data: (issue) {
-                    if (issue == null) {
-                      return Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpace.s16),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Linear issue not found',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(fontWeight: FontWeight.w800),
-                              ),
-                              Gap.h8,
-                              Text('Identifier: ${linearRef.identifier}'),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-                    return LinearIssueCard(
-                      issue: issue,
-                      onRefresh: () => ref.invalidate(
-                        linearIssueByIdentifierProvider(linearRef.identifier),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-            Gap.h16,
-          ],
           Card(
             key: _notesKey,
             child: Padding(
@@ -753,11 +556,24 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Notes',
+                  Text(
+                      linearRef != null ? 'My Notes' : 'Notes',
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium
                           ?.copyWith(fontWeight: FontWeight.w800)),
+                  if (linearRef != null) ...[
+                    Gap.h4,
+                    Text(
+                      'Personal notes (not synced to Linear)',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant
+                                .withOpacity(0.7),
+                          ),
+                    ),
+                  ],
                   Gap.h8,
                   TextField(
                     controller: _notesController,
@@ -880,6 +696,307 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
             ),
           ),
         ],
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Linear Task Content Builders
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  Widget _buildLinearSetupCard(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.s16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Linear link detected',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            Gap.h8,
+            const Text(
+              'Add your Linear API key in Settings to show an issue preview and enable sync.',
+            ),
+            Gap.h12,
+            FilledButton.icon(
+              onPressed: () => context.go('/settings'),
+              icon: const Icon(Icons.settings),
+              label: const Text('Open settings'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLinearLoadingState() {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(AppSpace.s16),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            Gap.w12,
+            Text('Loading Linear issue…'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLinearErrorState(BuildContext context, Object error) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.s16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Could not load Linear issue.',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            Gap.h8,
+            Text(error.toString(),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                    )),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLinearNotFoundState(
+      BuildContext context, LinearIssueRef linearRef) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.s16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Linear issue not found',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            Gap.h8,
+            Text('Identifier: ${linearRef.identifier}'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Main Linear task content: header, description, then task controls.
+  Widget _buildLinearTaskContent(
+    BuildContext context, {
+    required LinearIssue issue,
+    required TodayTask? task,
+    required String ymd,
+    required VoidCallback onRefresh,
+  }) {
+    final theme = Theme.of(context);
+    final meta = issue.toMeta();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Linear issue header: key/team, title, metadata row
+        LinearIssueHeader(meta: meta),
+        Gap.h16,
+
+        // Linear description (primary content block)
+        const LinearDescriptionLabel(label: 'Description'),
+        LinearDescriptionBlock(description: issue.description),
+        Gap.h16,
+
+        // Refresh action
+        TextButton.icon(
+          onPressed: onRefresh,
+          icon: const Icon(Icons.refresh, size: 16),
+          label: const Text('Refresh from Linear'),
+          style: TextButton.styleFrom(
+            foregroundColor: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Gap.h24,
+
+        // Task controls (visually secondary)
+        _buildTaskControlsSection(context, task: task, ymd: ymd),
+      ],
+    );
+  }
+
+  /// Non-Linear task header card.
+  Widget _buildTaskHeaderCard(
+    BuildContext context, {
+    required String title,
+    required TodayTask? task,
+    required String ymd,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.s16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SelectionArea(
+              child: Text(
+                title.isEmpty ? '—' : title,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w900),
+              ),
+            ),
+            Gap.h8,
+            _buildTaskChipsRow(context, task: task, ymd: ymd),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Task controls section (for Linear tasks, shown below description).
+  Widget _buildTaskControlsSection(
+    BuildContext context, {
+    required TodayTask? task,
+    required String ymd,
+  }) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Task Status',
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        Gap.h8,
+        _buildTaskChipsRow(context, task: task, ymd: ymd),
+      ],
+    );
+  }
+
+  /// Shared chips row for task controls (used by both Linear and non-Linear tasks).
+  Widget _buildTaskChipsRow(
+    BuildContext context, {
+    required TodayTask? task,
+    required String ymd,
+  }) {
+    return Wrap(
+      spacing: AppSpace.s8,
+      runSpacing: AppSpace.s8,
+      children: [
+        FilterChip(
+          label: const Text('Completed'),
+          selected: task?.completed == true,
+          onSelected: task == null
+              ? null
+              : (v) async {
+                  setState(() => _saveError = null);
+                  try {
+                    await ref
+                        .read(todayControllerProvider(ymd).notifier)
+                        .setTaskCompleted(widget.taskId, v);
+                  } catch (e) {
+                    if (!mounted) return;
+                    setState(() => _saveError = friendlyError(e));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(friendlyError(e))),
+                    );
+                  }
+                },
+        ),
+        FilterChip(
+          label: const Text('In progress'),
+          selected: task?.inProgress == true && task?.completed != true,
+          onSelected: task == null
+              ? null
+              : (v) async {
+                  setState(() => _saveError = null);
+                  try {
+                    await ref
+                        .read(todayControllerProvider(ymd).notifier)
+                        .setTaskInProgress(widget.taskId, v);
+                  } catch (e) {
+                    if (!mounted) return;
+                    setState(() => _saveError = friendlyError(e));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(friendlyError(e))),
+                    );
+                  }
+                },
+        ),
+        if (task != null)
+          SegmentedButton<TodayTaskType>(
+            segments: const [
+              ButtonSegment(
+                  value: TodayTaskType.mustWin, label: Text('Must‑Win')),
+              ButtonSegment(
+                  value: TodayTaskType.niceToDo, label: Text('Nice‑to‑Do')),
+            ],
+            selected: {task.type},
+            onSelectionChanged: (s) => ref
+                .read(todayControllerProvider(ymd).notifier)
+                .moveTaskType(widget.taskId, s.first),
+          ),
+        if (task != null) ...[
+          if ((task.goalYmd ?? '').trim().isEmpty)
+            ActionChip(
+              avatar: const Icon(Icons.event),
+              label: const Text('Add goal date'),
+              onPressed: (_loading || _saving || ymd.isEmpty)
+                  ? null
+                  : () => _pickGoalDate(
+                        ymd: ymd,
+                        taskId: widget.taskId,
+                        currentGoalYmd: task.goalYmd,
+                      ),
+            )
+          else
+            InputChip(
+              avatar: const Icon(Icons.event),
+              label: Text('Due ${_friendlyDate(task.goalYmd!)}'),
+              onPressed: (_loading || _saving || ymd.isEmpty)
+                  ? null
+                  : () => _pickGoalDate(
+                        ymd: ymd,
+                        taskId: widget.taskId,
+                        currentGoalYmd: task.goalYmd,
+                      ),
+              onDeleted: (_loading || _saving || ymd.isEmpty)
+                  ? null
+                  : () => _clearGoalDate(
+                        ymd: ymd,
+                        taskId: widget.taskId,
+                      ),
+              deleteIcon: const Icon(Icons.close),
+            ),
+        ],
+        OutlinedButton.icon(
+          onPressed: () => context.pop(),
+          icon: const Icon(Icons.close),
+          label: const Text('Close'),
+        ),
       ],
     );
   }

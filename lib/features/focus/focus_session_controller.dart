@@ -6,6 +6,7 @@ import '../../data/focus/focus_policy_repository.dart';
 import '../../data/focus/focus_session_repository.dart';
 import '../../domain/focus/focus_friction.dart';
 import '../../domain/focus/focus_session.dart';
+import '../../platform/notifications/notification_service.dart';
 import '../../platform/restriction_engine/restriction_engine.dart';
 import 'focus_providers.dart';
 
@@ -93,6 +94,17 @@ class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
 
       await _sessions.saveActiveSession(session);
       state = AsyncData(session);
+
+      // Schedule a local notification when the dumb phone session ends.
+      final notificationService = ref.read(notificationServiceProvider);
+      await notificationService.scheduleFocusSessionComplete(
+        notificationId: notificationIdForFocusSession(session.id),
+        endsAt: session.plannedEndAt,
+        title: 'Dumb Phone session complete',
+        body: 'Your focus session has ended. Open the app to continue.',
+        route: '/focus',
+      );
+
       return true;
     } catch (e, st) {
       state = AsyncError(e, st);
@@ -109,6 +121,11 @@ class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
       state = const AsyncData(null);
       return;
     }
+
+    // Cancel the "session complete" notification if they ended early.
+    ref.read(notificationServiceProvider).cancel(
+          notificationIdForFocusSession(active.id),
+        );
 
     // Preserve the previous session while we perform the slow platform cleanup,
     // so the UI can show "Ending..." instead of blank-loading the whole card.

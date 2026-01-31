@@ -110,7 +110,9 @@ Future<void> showErrorDialog(
   String title = 'Something went wrong',
   required Object error,
   String? message,
-  bool includeRawDetails = true,
+  /// Set to true only in dev/debug or when user explicitly requests "technical details".
+  /// Avoid leaking stack traces and internal messages in production.
+  bool includeRawDetails = false,
 }) async {
   final friendly = message ?? friendlyError(error);
   final raw = error.toString();

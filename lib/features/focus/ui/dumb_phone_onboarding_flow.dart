@@ -6,12 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/user_settings.dart';
-import '../../../platform/nfc/nfc_scan_purpose.dart';
-import '../../../platform/nfc/nfc_scan_service.dart';
 import '../../../platform/restriction_engine/restriction_engine.dart';
 import '../../../ui/components/info_banner.dart';
 import '../../../ui/spacing.dart';
-import '../dumb_phone_session_gate_controller.dart';
 import '../focus_policy_controller.dart';
 import '../focus_providers.dart';
 import '../restriction_permissions_provider.dart';
@@ -40,9 +37,8 @@ class _DumbPhoneOnboardingFlowState
 
   // Track completion of optional steps
   bool _permissionsGranted = false;
-  bool _nfcCardPaired = false;
 
-  static const _totalSteps = 4;
+  static const _totalSteps = 3;
 
   @override
   void initState() {
@@ -127,19 +123,8 @@ class _DumbPhoneOnboardingFlowState
                     },
                     onBack: _prevStep,
                   ),
-                  _NfcSetupStep(
-                    onSkip: () {
-                      _nextStep();
-                    },
-                    onCardPaired: () {
-                      setState(() => _nfcCardPaired = true);
-                      _nextStep();
-                    },
-                    onBack: _prevStep,
-                  ),
                   _ReadyStep(
                     permissionsGranted: _permissionsGranted,
-                    nfcCardPaired: _nfcCardPaired,
                     onComplete: _completeOnboarding,
                     onBack: _prevStep,
                   ),
@@ -258,19 +243,19 @@ class _IntroStep extends StatelessWidget {
             ),
           ),
           Gap.h16,
-          _BenefitRow(
+          const _BenefitRow(
             icon: Icons.block,
             title: 'Block distracting apps',
             description: 'Temporarily block apps so you can focus on what matters.',
           ),
           Gap.h12,
-          _BenefitRow(
+          const _BenefitRow(
             icon: Icons.timer,
             title: 'Set your focus time',
             description: 'Choose how long you want to focus—from 5 minutes to 3 hours.',
           ),
           Gap.h12,
-          _BenefitRow(
+          const _BenefitRow(
             icon: Icons.psychology,
             title: 'Built-in friction',
             description: 'Make ending early intentionally harder to build better habits.',
@@ -446,170 +431,15 @@ class _PermissionsStep extends ConsumerWidget {
   }
 }
 
-/// Step 3: Optional NFC card setup
-class _NfcSetupStep extends ConsumerWidget {
-  const _NfcSetupStep({
-    required this.onSkip,
-    required this.onCardPaired,
-    required this.onBack,
-  });
-
-  final VoidCallback onSkip;
-  final VoidCallback onCardPaired;
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final gate = ref.watch(dumbPhoneSessionGateControllerProvider).valueOrNull;
-    final hasPairedCard = gate?.hasPairedCard == true;
-
-    return _StepContainer(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Status indicator
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(AppSpace.s24),
-            decoration: BoxDecoration(
-              color: hasPairedCard
-                  ? theme.colorScheme.primaryContainer.withOpacity(0.3)
-                  : theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Column(
-              children: [
-                Icon(
-                  hasPairedCard ? Icons.nfc : Icons.contactless,
-                  size: 64,
-                  color: hasPairedCard
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.onSurfaceVariant,
-                ),
-                Gap.h12,
-                Text(
-                  hasPairedCard ? 'Card paired' : 'Add an NFC card',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Gap.h4,
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpace.s12,
-                    vertical: AppSpace.s4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Optional',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: theme.colorScheme.onSecondaryContainer,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Gap.h24,
-          Text(
-            'Extra accountability',
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Gap.h12,
-          Text(
-            'Pair any NFC card or tag to add physical friction when ending a session early. Leave your card somewhere inconvenient (like another room) to make giving up harder.',
-            style: theme.textTheme.bodyMedium,
-          ),
-          Gap.h16,
-          _BenefitRow(
-            icon: Icons.credit_card,
-            title: 'Any NFC card works',
-            description:
-                'Old hotel keys, transit cards, or cheap NFC tags from Amazon.',
-          ),
-          Gap.h12,
-          _BenefitRow(
-            icon: Icons.lock_outline,
-            title: 'Privacy first',
-            description:
-                'We only store a hash of the card ID—never the actual data.',
-          ),
-          const Spacer(),
-          // Actions
-          if (hasPairedCard) ...[
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: onCardPaired,
-                icon: const Icon(Icons.arrow_forward),
-                label: const Text('Continue'),
-              ),
-            ),
-          ] else ...[
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () async {
-                  final scan = await ref
-                      .read(nfcScanServiceProvider)
-                      .scanKeyHash(context, purpose: NfcScanPurpose.pair);
-                  if (scan == null) return;
-
-                  await ref
-                      .read(dumbPhoneSessionGateControllerProvider.notifier)
-                      .savePairedCardHash(scan);
-
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Card paired successfully!')),
-                  );
-                },
-                icon: const Icon(Icons.nfc),
-                label: const Text('Pair a card'),
-              ),
-            ),
-            Gap.h12,
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: onSkip,
-                child: const Text('Skip for now'),
-              ),
-            ),
-          ],
-          Gap.h8,
-          SizedBox(
-            width: double.infinity,
-            child: TextButton.icon(
-              onPressed: onBack,
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('Back'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Step 4: Ready to go!
+/// Step 3: Ready to go!
 class _ReadyStep extends ConsumerStatefulWidget {
   const _ReadyStep({
     required this.permissionsGranted,
-    required this.nfcCardPaired,
     required this.onComplete,
     required this.onBack,
   });
 
   final bool permissionsGranted;
-  final bool nfcCardPaired;
   final VoidCallback onComplete;
   final VoidCallback onBack;
 
@@ -690,14 +520,6 @@ class _ReadyStepState extends ConsumerState<_ReadyStep> {
             subtitle: widget.permissionsGranted
                 ? 'App blocking is ready'
                 : 'Limited functionality without permissions',
-          ),
-          Gap.h12,
-          _ChecklistItem(
-            isComplete: widget.nfcCardPaired,
-            title: 'NFC card',
-            subtitle: widget.nfcCardPaired
-                ? 'Extra friction enabled'
-                : 'Optional—you can add one later in Settings',
           ),
           Gap.h24,
           Card(

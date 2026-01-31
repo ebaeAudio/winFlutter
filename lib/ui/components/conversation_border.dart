@@ -29,8 +29,7 @@ class ConversationBorder extends StatefulWidget {
 
 class _ConversationBorderState extends State<ConversationBorder>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _spin =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+  late final AnimationController _spin;
 
   static const double _outerPadding = AppSpace.s4;
   static const double _minStroke = 2.25;
@@ -39,6 +38,10 @@ class _ConversationBorderState extends State<ConversationBorder>
   @override
   void initState() {
     super.initState();
+    _spin = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
     if (widget.active) _spin.repeat();
   }
 

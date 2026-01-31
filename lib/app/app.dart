@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'router.dart';
 import 'theme.dart';
 import '../platform/notifications/notification_service.dart';
+import '../platform/deep_link/deep_link_handler.dart';
 
 class AppRoot extends ConsumerWidget {
   const AppRoot({super.key});
@@ -18,6 +19,13 @@ class AppRoot extends ConsumerWidget {
       if (next == null || next.trim().isEmpty) return;
       router.go(next);
       ref.read(pendingNotificationRouteProvider.notifier).state = null;
+    });
+
+    // Consume pending deep links from wintheyear:// URL scheme (iOS shield).
+    ref.listen<String?>(pendingDeepLinkRouteProvider, (prev, next) {
+      if (next == null || next.trim().isEmpty) return;
+      router.go(next);
+      ref.read(pendingDeepLinkRouteProvider.notifier).state = null;
     });
 
     return MaterialApp.router(

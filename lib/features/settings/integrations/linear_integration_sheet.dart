@@ -27,6 +27,22 @@ class _LinearIntegrationSheetState extends ConsumerState<LinearIntegrationSheet>
 
   Future<void> _save() async {
     if (_busy) return;
+    final rawKey = _keyController.text;
+    
+    // Check if key appears to have valid format before saving
+    // (This is a quick pre-check; actual validation happens in saveApiKey)
+    final trimmed = rawKey.trim();
+    if (trimmed.isNotEmpty && 
+        !trimmed.startsWith('lin_api_') && 
+        !trimmed.startsWith('lin_oauth_')) {
+      setState(() {
+        _error = 'API key should start with "lin_api_" or "lin_oauth_". '
+            'Make sure you copied the full key from Linear.';
+        _success = null;
+      });
+      return;
+    }
+    
     setState(() {
       _busy = true;
       _error = null;
@@ -35,11 +51,11 @@ class _LinearIntegrationSheetState extends ConsumerState<LinearIntegrationSheet>
     try {
       await ref
           .read(linearIntegrationControllerProvider.notifier)
-          .saveApiKey(_keyController.text);
+          .saveApiKey(rawKey);
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _success = 'Saved.';
+        _success = 'Saved. Tap "Test" to verify the connection.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -88,13 +104,28 @@ class _LinearIntegrationSheetState extends ConsumerState<LinearIntegrationSheet>
       setState(() {
         _busy = false;
         final who = (viewer.displayName ?? viewer.name ?? '').trim();
-        _success = who.isEmpty ? 'Connected.' : 'Connected as $who.';
+        _success = who.isEmpty ? 'Connected!' : 'Connected as $who!';
       });
     } catch (e) {
       if (!mounted) return;
+      final msg = e.toString();
+      String friendlyError;
+      if (msg.contains('401') || msg.contains('Unauthorized')) {
+        friendlyError = 'Authentication failed (401). '
+            'Please re-paste your API key. '
+            'Tip: On iOS, try typing the key manually or use "Paste and Match Style".';
+      } else if (msg.contains('400') || msg.contains('Bad Request')) {
+        friendlyError = 'Invalid request (400). '
+            'The API key may contain hidden characters. '
+            'Try clearing and re-entering it.';
+      } else if (msg.contains('SocketException') || msg.contains('ClientException')) {
+        friendlyError = 'Network error. Check your internet connection.';
+      } else {
+        friendlyError = msg;
+      }
       setState(() {
         _busy = false;
-        _error = e.toString();
+        _error = friendlyError;
       });
     }
   }
@@ -167,6 +198,13 @@ class _LinearIntegrationSheetState extends ConsumerState<LinearIntegrationSheet>
               decoration: const InputDecoration(
                 labelText: 'Personal API key',
                 hintText: 'lin_api_…',
+              ),
+            ),
+            Gap.h4,
+            Text(
+              'Tip: If pasting doesn\'t work, try "Paste and Match Style" or type the key.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
               ),
             ),
             Gap.h12,

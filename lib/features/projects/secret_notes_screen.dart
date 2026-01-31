@@ -183,7 +183,7 @@ class _SecretNotesScreenState extends ConsumerState<SecretNotesScreen> {
       final decoded = Uri.decodeComponent(target);
       final nextNote = decoded.trim();
       if (nextNote.isEmpty) return;
-      context.go('/projects/secret-notes?note=${Uri.encodeComponent(nextNote)}');
+      context.go('/settings/projects/secret-notes?note=${Uri.encodeComponent(nextNote)}');
       return;
     }
   }
@@ -242,7 +242,7 @@ class _SecretNotesScreenState extends ConsumerState<SecretNotesScreen> {
               }
               if (!context.mounted) return;
               context.go(
-                '/projects/secret-notes?note=${Uri.encodeComponent(noteName)}',
+                '/settings/projects/secret-notes?note=${Uri.encodeComponent(noteName)}',
               );
             },
             icon: const Icon(Icons.note_add_outlined),
@@ -436,7 +436,7 @@ class _EditorToolbar extends StatelessWidget {
               height: 44,
               color: scheme.outlineVariant,
             ),
-            _ToolButton(
+            const _ToolButton(
               tooltip: 'Preview (top right)',
               icon: Icons.visibility,
               onPressed: null,

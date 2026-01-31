@@ -31,4 +31,13 @@ abstract interface class TasksRepository {
   });
 
   Future<void> delete({required String id});
+
+  /// Permanently deletes a task (no undo).
+  Future<void> hardDelete({required String id});
+
+  /// Restores a soft-deleted task.
+  Future<Task> restore({required String id});
+
+  /// Returns true if soft delete is supported.
+  Future<bool> supportsSoftDelete();
 }

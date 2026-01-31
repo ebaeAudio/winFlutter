@@ -36,6 +36,11 @@ export type AssistantRequest = {
   baseDateYmd: string;
 };
 
+export type GeneratePrdRequest = {
+  title: string;
+  description: string;
+};
+
 /**
  * Strict, schema-based parsing for assistant request bodies.
  *
@@ -66,6 +71,35 @@ export function parseAssistantRequestBodyStrict(raw: unknown, opts: {
   if (!isYmd(baseDateYmd)) return { ok: false, error: "baseDateYmd required (YYYY-MM-DD)" };
 
   return { ok: true, value: { transcript, baseDateYmd } };
+}
+
+/**
+ * Strict, schema-based parsing for PRD generation request bodies.
+ */
+export function parseGeneratePrdRequestBodyStrict(
+  raw: unknown,
+  opts: { maxTitleChars: number; maxDescriptionChars: number },
+): { ok: true; value: GeneratePrdRequest } | { ok: false; error: string } {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ok: false, error: "Body must be a JSON object" };
+  }
+
+  const obj = raw as Record<string, unknown>;
+  const allowedKeys = new Set(["title", "description"]);
+  for (const k of Object.keys(obj)) {
+    if (!allowedKeys.has(k)) return { ok: false, error: `Unexpected field: ${k}` };
+  }
+
+  const titleRaw = typeof obj["title"] === "string" ? obj["title"] : "";
+  const descriptionRaw = typeof obj["description"] === "string" ? obj["description"] : "";
+
+  const title = clampString(stripUnsafeControlChars(titleRaw), opts.maxTitleChars);
+  const description = clampString(stripUnsafeControlChars(descriptionRaw), opts.maxDescriptionChars);
+
+  if (!title) return { ok: false, error: "title required" };
+  if (!description) return { ok: false, error: "description required" };
+
+  return { ok: true, value: { title, description } };
 }
 
 function asBool(raw: unknown): boolean | null {

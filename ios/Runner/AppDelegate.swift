@@ -18,6 +18,35 @@ import UIKit
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
+  // MARK: - APNs (Push Notifications)
+
+  override func application(
+    _ application: UIApplication,
+    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+  ) {
+    let token = deviceToken.map { String(format: "%02x", $0) }.joined()
+    PushNotificationsPlugin.setDeviceToken(token)
+    super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    // Best-effort: nothing to do besides logging.
+    NSLog("APNs registration failed: \(error)")
+    super.application(application, didFailToRegisterForRemoteNotificationsWithError: error)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+    fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+  ) {
+    PushNotificationsPlugin.handleRemoteNotification(userInfo)
+    completionHandler(.newData)
+  }
+
   @available(iOS 13.0, *)
   override func application(
     _ application: UIApplication,

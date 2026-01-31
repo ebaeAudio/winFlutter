@@ -8,6 +8,7 @@ import '../../../domain/focus/focus_policy.dart';
 import '../../../ui/app_scaffold.dart';
 import '../../../ui/components/reachability_fab_cluster.dart';
 import '../../../ui/nav_shell.dart';
+import '../../../utils/iterable_extensions.dart';
 import '../focus_policy_controller.dart';
 import '../focus_providers.dart';
 
@@ -345,8 +346,4 @@ class _NumberRow extends StatelessWidget {
       ],
     );
   }
-}
-
-extension<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

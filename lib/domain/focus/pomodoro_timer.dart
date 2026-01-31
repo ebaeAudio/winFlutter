@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import '../../utils/iterable_extensions.dart';
 
 enum PomodoroPhase { focus, break_ }
 
@@ -157,8 +158,4 @@ class PomodoroTimerState {
 
   static String toJsonString(PomodoroTimerState state) =>
       jsonEncode(state.toJson());
-}
-
-extension<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

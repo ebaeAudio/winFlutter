@@ -40,6 +40,7 @@ class TodayTask {
     this.estimateMinutes,
     this.actualMinutes,
     this.subtasks = const [],
+    this.deletedAtMs,
   });
 
   final String id;
@@ -66,6 +67,12 @@ class TodayTask {
   final int? actualMinutes;
   final List<TodaySubtask> subtasks;
 
+  /// Soft delete timestamp (local mode only).
+  final int? deletedAtMs;
+
+  /// Returns true if the task has been soft-deleted.
+  bool get isDeleted => deletedAtMs != null;
+
   TodayTask copyWith({
     String? title,
     TodayTaskType? type,
@@ -80,6 +87,7 @@ class TodayTask {
     int? estimateMinutes,
     int? actualMinutes,
     List<TodaySubtask>? subtasks,
+    Object? deletedAtMs = _todayTaskUnset,
   }) {
     final resolvedStarterStep = starterStep ?? this.starterStep ?? nextStep ?? this.nextStep;
     final resolvedEstimatedMinutes =
@@ -101,6 +109,7 @@ class TodayTask {
       estimateMinutes: resolvedEstimatedMinutes,
       actualMinutes: actualMinutes ?? this.actualMinutes,
       subtasks: subtasks ?? this.subtasks,
+      deletedAtMs: deletedAtMs == _todayTaskUnset ? this.deletedAtMs : deletedAtMs as int?,
     );
   }
 
@@ -123,6 +132,7 @@ class TodayTask {
         if (actualMinutes != null) 'actualMinutes': actualMinutes,
         if (subtasks.isNotEmpty)
           'subtasks': [for (final s in subtasks) s.toJson()],
+        if (deletedAtMs != null) 'deletedAtMs': deletedAtMs,
       };
 
   static TodayTask fromJson(Map<String, Object?> json) {
@@ -162,6 +172,7 @@ class TodayTask {
       estimateMinutes: estimatedMinutes,
       actualMinutes: (json['actualMinutes'] as num?)?.toInt(),
       subtasks: subtasks,
+      deletedAtMs: (json['deletedAtMs'] as num?)?.toInt(),
     );
   }
 }
@@ -246,6 +257,8 @@ class TodayDayData {
     required this.focusModeEnabled,
     required this.focusTaskId,
     required this.activeTimebox,
+    this.updatingTaskIds = const {},
+    this.updatingHabitIds = const {},
   });
 
   final String ymd;
@@ -262,6 +275,18 @@ class TodayDayData {
   /// Optional: active timebox for the day (persisted locally).
   final ActiveTimebox? activeTimebox;
 
+  /// Task IDs currently being updated (prevents double-click issues).
+  final Set<String> updatingTaskIds;
+
+  /// Habit IDs currently being updated (prevents double-click issues).
+  final Set<String> updatingHabitIds;
+
+  /// Returns true if the given task is currently being updated.
+  bool isTaskUpdating(String taskId) => updatingTaskIds.contains(taskId);
+
+  /// Returns true if the given habit is currently being updated.
+  bool isHabitUpdating(String habitId) => updatingHabitIds.contains(habitId);
+
   TodayDayData copyWith({
     List<TodayTask>? tasks,
     List<TodayHabit>? habits,
@@ -269,6 +294,8 @@ class TodayDayData {
     bool? focusModeEnabled,
     String? focusTaskId,
     ActiveTimebox? activeTimebox,
+    Set<String>? updatingTaskIds,
+    Set<String>? updatingHabitIds,
   }) {
     return TodayDayData(
       ymd: ymd,
@@ -278,6 +305,8 @@ class TodayDayData {
       focusModeEnabled: focusModeEnabled ?? this.focusModeEnabled,
       focusTaskId: focusTaskId,
       activeTimebox: activeTimebox ?? this.activeTimebox,
+      updatingTaskIds: updatingTaskIds ?? this.updatingTaskIds,
+      updatingHabitIds: updatingHabitIds ?? this.updatingHabitIds,
     );
   }
 

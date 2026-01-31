@@ -54,7 +54,26 @@ const Object _unset = Object();
 final _secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
   // Intentionally non-const so widget/unit tests can replace
   // `FlutterSecureStoragePlatform.instance` before the first instance is created.
-  return const FlutterSecureStorage();
+  //
+  // Security configuration:
+  // - iOS: Keychain with "WhenUnlockedThisDeviceOnly" prevents backup/restore
+  //   of credentials to a different device (mitigates device theft scenarios).
+  // - Android: EncryptedSharedPreferences with AES-256-GCM encryption.
+  //   resetOnError clears corrupted data rather than crashing.
+  return const FlutterSecureStorage(
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock_this_device,
+      accountName: 'com.winFlutter.credentials',
+    ),
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+      resetOnError: true,
+    ),
+    mOptions: MacOsOptions(
+      accessibility: KeychainAccessibility.first_unlock_this_device,
+      accountName: 'com.winFlutter.credentials',
+    ),
+  );
 });
 
 final linearIntegrationControllerProvider = AsyncNotifierProvider<
@@ -72,26 +91,83 @@ class LinearIntegrationController extends AsyncNotifier<LinearIntegrationState> 
   @override
   Future<LinearIntegrationState> build() async {
     final prefs = ref.watch(sharedPreferencesProvider);
-    final apiKey = await _secure.read(key: _kApiKey);
+    final raw = await _secure.read(key: _kApiKey);
+    // Sanitize on read to fix iOS keychain issues with invisible characters.
+    final apiKey = raw != null ? _sanitizeApiKey(raw) : null;
     final lastSyncAtMs = prefs.getInt(_kLastSyncAtMs);
     final lastSyncError = prefs.getString(_kLastSyncError);
     return LinearIntegrationState(
-      apiKey: apiKey,
+      apiKey: (apiKey?.isEmpty ?? true) ? null : apiKey,
       lastSyncAtMs: lastSyncAtMs,
       lastSyncError: lastSyncError,
     );
   }
 
+  /// Sanitize API key by removing invisible Unicode characters.
+  ///
+  /// iOS copy-paste often introduces zero-width characters, non-breaking spaces,
+  /// BOM markers, and other invisible Unicode that cause 401 errors.
+  static String _sanitizeApiKey(String raw) {
+    // Remove common invisible characters:
+    // - BOM (U+FEFF)
+    // - Zero-width space (U+200B)
+    // - Zero-width non-joiner (U+200C)
+    // - Zero-width joiner (U+200D)
+    // - Non-breaking space (U+00A0)
+    // - Soft hyphen (U+00AD)
+    // - Word joiner (U+2060)
+    // - Left-to-right/right-to-left marks
+    final cleaned = raw
+        .replaceAll('\u{FEFF}', '') // BOM
+        .replaceAll('\u{200B}', '') // Zero-width space
+        .replaceAll('\u{200C}', '') // Zero-width non-joiner
+        .replaceAll('\u{200D}', '') // Zero-width joiner
+        .replaceAll('\u{00A0}', ' ') // Non-breaking space → regular space
+        .replaceAll('\u{00AD}', '') // Soft hyphen
+        .replaceAll('\u{2060}', '') // Word joiner
+        .replaceAll('\u{200E}', '') // Left-to-right mark
+        .replaceAll('\u{200F}', '') // Right-to-left mark
+        .replaceAll('\u{202A}', '') // Left-to-right embedding
+        .replaceAll('\u{202B}', '') // Right-to-left embedding
+        .replaceAll('\u{202C}', '') // Pop directional formatting
+        .replaceAll('\u{202D}', '') // Left-to-right override
+        .replaceAll('\u{202E}', '') // Right-to-left override
+        .replaceAll('\r\n', '') // Windows newlines
+        .replaceAll('\r', '') // Mac classic newlines
+        .replaceAll('\n', '') // Unix newlines
+        .trim();
+
+    // Final pass: keep only printable ASCII + underscore (Linear keys are ASCII-only)
+    final buffer = StringBuffer();
+    for (final char in cleaned.codeUnits) {
+      // Allow: 0-9 (48-57), A-Z (65-90), a-z (97-122), underscore (95)
+      if ((char >= 48 && char <= 57) ||
+          (char >= 65 && char <= 90) ||
+          (char >= 97 && char <= 122) ||
+          char == 95) {
+        buffer.writeCharCode(char);
+      }
+    }
+    return buffer.toString();
+  }
+
+  /// Validate Linear API key format.
+  ///
+  /// Linear personal API keys start with `lin_api_` and OAuth tokens with `lin_oauth_`.
+  static bool isValidLinearKeyFormat(String key) {
+    return key.startsWith('lin_api_') || key.startsWith('lin_oauth_');
+  }
+
   Future<void> saveApiKey(String apiKey) async {
-    final trimmed = apiKey.trim();
-    if (trimmed.isEmpty) {
+    final sanitized = _sanitizeApiKey(apiKey);
+    if (sanitized.isEmpty) {
       await clearApiKey();
       return;
     }
-    await _secure.write(key: _kApiKey, value: trimmed);
+    await _secure.write(key: _kApiKey, value: sanitized);
     final current = state.valueOrNull;
     if (current != null) {
-      state = AsyncData(current.copyWith(apiKey: trimmed));
+      state = AsyncData(current.copyWith(apiKey: sanitized));
     } else {
       ref.invalidateSelf();
     }

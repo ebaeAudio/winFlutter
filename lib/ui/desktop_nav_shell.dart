@@ -99,7 +99,7 @@ class _DesktopNavShellState extends ConsumerState<DesktopNavShell> {
               : 'Failed to add task',
         ),
         action: success
-            ? SnackBarAction(label: 'View', onPressed: () => _navigateTo(2))
+            ? SnackBarAction(label: 'View', onPressed: () => _navigateTo(1))
             : null,
       ),
     );
@@ -114,7 +114,7 @@ class _DesktopNavShellState extends ConsumerState<DesktopNavShell> {
       SnackBar(
         content: Text(success ? 'Habit added: "$name"' : 'Failed to add habit'),
         action: success
-            ? SnackBarAction(label: 'View', onPressed: () => _navigateTo(2))
+            ? SnackBarAction(label: 'View', onPressed: () => _navigateTo(1))
             : null,
       ),
     );
@@ -135,7 +135,7 @@ class _DesktopNavShellState extends ConsumerState<DesktopNavShell> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text('Note added to reflection'),
-        action: SnackBarAction(label: 'View', onPressed: () => _navigateTo(2)),
+        action: SnackBarAction(label: 'View', onPressed: () => _navigateTo(1)),
       ),
     );
   }
@@ -145,7 +145,7 @@ class _DesktopNavShellState extends ConsumerState<DesktopNavShell> {
     final minutes = int.tryParse(durationText.trim()) ?? 25;
 
     // Navigate to Focus screen first.
-    _navigateTo(3);
+    _navigateTo(2);
 
     // Show instruction - actual focus start requires policy selection.
     if (!mounted) return;
@@ -182,52 +182,45 @@ class _DesktopNavShellState extends ConsumerState<DesktopNavShell> {
 
     // Define navigation items matching the mobile NavShell.
     final destinations = <_NavItem>[
-      _NavItem(
-        icon: Icons.workspaces_outline,
-        selectedIcon: Icons.workspaces,
-        label: 'Projects',
-        shortcut: '⌘4',
-        routeIndex: 0,
-      ),
-      _NavItem(
+      const _NavItem(
         icon: Icons.check_circle_outline,
         selectedIcon: Icons.check_circle,
         label: 'Tasks',
         shortcut: null,
-        routeIndex: 1,
+        routeIndex: 0,
       ),
-      _NavItem(
+      const _NavItem(
         icon: Icons.today_outlined,
         selectedIcon: Icons.today,
         label: 'Now',
         shortcut: '⌘1',
-        routeIndex: 2,
+        routeIndex: 1,
       ),
-      _NavItem(
+      const _NavItem(
         icon: Icons.lock_outline,
         selectedIcon: Icons.lock,
         label: 'Focus',
         shortcut: '⌘2',
-        routeIndex: 3,
+        routeIndex: 2,
       ),
-      _NavItem(
+      const _NavItem(
         icon: Icons.settings_outlined,
         selectedIcon: Icons.settings,
         label: 'Settings',
         shortcut: '⌘,',
-        routeIndex: 4,
+        routeIndex: 3,
       ),
     ];
 
     // Add admin dashboard if user is admin
     if (isAdminAsync.valueOrNull == true) {
       destinations.add(
-        _NavItem(
+        const _NavItem(
           icon: Icons.admin_panel_settings_outlined,
           selectedIcon: Icons.admin_panel_settings,
           label: 'Admin',
           shortcut: null,
-          routeIndex: 5,
+          routeIndex: 4,
           isAdmin: true,
         ),
       );
@@ -246,19 +239,19 @@ class _DesktopNavShellState extends ConsumerState<DesktopNavShell> {
             onInvoke: (_) => _openQuickCapture(),
           ),
           GoToTodayIntent: CallbackAction<GoToTodayIntent>(
-            onInvoke: (_) => _navigateTo(2),
-          ),
-          GoToFocusIntent: CallbackAction<GoToFocusIntent>(
-            onInvoke: (_) => _navigateTo(3),
-          ),
-          GoToProjectsIntent: CallbackAction<GoToProjectsIntent>(
-            onInvoke: (_) => _navigateTo(0),
-          ),
-          GoToTasksIntent: CallbackAction<GoToTasksIntent>(
             onInvoke: (_) => _navigateTo(1),
           ),
+          GoToFocusIntent: CallbackAction<GoToFocusIntent>(
+            onInvoke: (_) => _navigateTo(2),
+          ),
+          GoToProjectsIntent: CallbackAction<GoToProjectsIntent>(
+            onInvoke: (_) => context.go('/settings/projects'),
+          ),
+          GoToTasksIntent: CallbackAction<GoToTasksIntent>(
+            onInvoke: (_) => _navigateTo(0),
+          ),
           GoToSettingsIntent: CallbackAction<GoToSettingsIntent>(
-            onInvoke: (_) => _navigateTo(4),
+            onInvoke: (_) => _navigateTo(3),
           ),
         },
         child: Focus(

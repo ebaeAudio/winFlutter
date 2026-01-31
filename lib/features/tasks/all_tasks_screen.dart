@@ -7,12 +7,15 @@ import 'dart:async';
 import '../../data/tasks/all_tasks_models.dart';
 import '../../data/tasks/all_tasks_providers.dart';
 import '../../data/tasks/all_tasks_repository.dart';
+import '../../data/tasks/zombie_tasks_provider.dart';
 import '../../data/tasks/task.dart';
+import '../../data/tasks/task_realtime_provider.dart';
 import '../../app/theme.dart';
 import 'all_tasks_query.dart';
 import '../../ui/app_scaffold.dart';
 import '../../ui/components/empty_state_card.dart';
 import '../../ui/components/section_header.dart';
+import '../today/widgets/zombie_task_alert_card.dart';
 import '../../ui/components/task_list.dart';
 import '../../ui/spacing.dart';
 
@@ -435,6 +438,19 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen for realtime task changes from other devices.
+    // Refresh the task list when any change is detected.
+    ref.listen<AsyncValue<TaskChangeEvent?>>(
+      taskRealtimeChangesProvider,
+      (previous, next) {
+        final event = next.valueOrNull;
+        if (event != null) {
+          // Trigger a refresh by incrementing the refresh counter.
+          ref.read(_allTasksRefreshProvider.notifier).state++;
+        }
+      },
+    );
+
     final repo = ref.watch(allTasksRepositoryProvider);
     final asyncTasks = repo == null ? null : ref.watch(allTasksListProvider);
     // Avoid flashing a full-screen loading state during refreshes (e.g. after
@@ -535,6 +551,22 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
           onSearchChanged: () => setState(() {}),
         ),
         Gap.h16,
+        Builder(
+          builder: (context) {
+            final zombiesAsync = ref.watch(zombieTasksProvider);
+            final zombies = zombiesAsync.valueOrNull;
+            if (zombies == null || zombies.isEmpty) {
+              return const SizedBox.shrink();
+            }
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.s16),
+              child: ZombieTaskAlertCard(
+                zombies: zombies,
+                onOpen: () => context.go('/tasks/cleanup'),
+              ),
+            );
+          },
+        ),
         if (repo == null)
           EmptyStateCard(
             icon: Icons.cloud_off,

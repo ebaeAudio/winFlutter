@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/theme.dart';
+import '../../utils/iterable_extensions.dart';
 
 enum TodayTimerKind { focus, break_ }
 
@@ -212,9 +213,5 @@ class TodayTimeboxController extends StateNotifier<ActiveTodayTimer?> {
     await _prefs.remove(_keyForPendingAutoStart25m(_ymd));
     return startFocus(taskId: focusTaskId, minutes: 25);
   }
-}
-
-extension<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }
 

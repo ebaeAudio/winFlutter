@@ -155,11 +155,11 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
       CommandPaletteItem(
         id: 'nav.projects',
         label: 'Go to Projects',
-        icon: Icons.workspaces_outline,
+        icon: Icons.folder_outlined,
         shortcut: '⌘4',
         category: 'Navigation',
-        keywords: ['linear', 'issues'],
-        onExecute: () => context.go('/projects'),
+        keywords: ['notes', 'projects', 'ideas', 'goals'],
+        onExecute: () => context.go('/settings/projects'),
       ),
       CommandPaletteItem(
         id: 'nav.tasks',
@@ -391,8 +391,8 @@ class _CommandPaletteDialogState extends State<CommandPaletteDialog> {
                 // Footer
                 // ─────────────────────────────────────────────────────────────
                 Divider(height: 1, color: scheme.outlineVariant),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
+                const Padding(
+                  padding: EdgeInsets.symmetric(
                     horizontal: AppSpace.s16,
                     vertical: AppSpace.s8,
                   ),

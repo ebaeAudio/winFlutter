@@ -583,4 +583,22 @@ class SupabaseTasksRepository implements TasksRepository {
     final _ = _requireUserId();
     await _client.from('tasks').delete().eq('id', id);
   }
+
+  @override
+  Future<void> hardDelete({required String id}) async {
+    // Supabase doesn't support soft delete, so hardDelete is the same as delete.
+    await delete(id: id);
+  }
+
+  @override
+  Future<Task> restore({required String id}) async {
+    // Supabase doesn't have soft delete - this shouldn't be called.
+    throw UnsupportedError('Soft delete is not supported in Supabase mode.');
+  }
+
+  @override
+  Future<bool> supportsSoftDelete() async {
+    // Supabase backend doesn't have a deleted_at column yet.
+    return false;
+  }
 }

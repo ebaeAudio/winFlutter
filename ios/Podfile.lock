@@ -13,8 +13,9 @@ PODS:
     - Flutter
   - flutter_timezone (0.0.1):
     - Flutter
-  - nfc_manager (0.0.1):
+  - gal (1.0.0):
     - Flutter
+    - FlutterMacOS
   - path_provider_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -35,7 +36,7 @@ DEPENDENCIES:
   - flutter_local_notifications (from `.symlinks/plugins/flutter_local_notifications/ios`)
   - flutter_secure_storage (from `.symlinks/plugins/flutter_secure_storage/ios`)
   - flutter_timezone (from `.symlinks/plugins/flutter_timezone/ios`)
-  - nfc_manager (from `.symlinks/plugins/nfc_manager/ios`)
+  - gal (from `.symlinks/plugins/gal/darwin`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
   - speech_to_text (from `.symlinks/plugins/speech_to_text/darwin`)
@@ -59,8 +60,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_secure_storage/ios"
   flutter_timezone:
     :path: ".symlinks/plugins/flutter_timezone/ios"
-  nfc_manager:
-    :path: ".symlinks/plugins/nfc_manager/ios"
+  gal:
+    :path: ".symlinks/plugins/gal/darwin"
   path_provider_foundation:
     :path: ".symlinks/plugins/path_provider_foundation/darwin"
   shared_preferences_foundation:
@@ -71,19 +72,19 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/url_launcher_ios/ios"
 
 SPEC CHECKSUMS:
-  app_links: f3e17e4ee5e357b39d8b95290a9b2c299fca71c6
-  camera_avfoundation: adb0207d868b2d873e895371d88448399ab78d87
+  app_links: 76b66b60cc809390ca1ad69bfd66b998d2387ac7
+  camera_avfoundation: be3be85408cd4126f250386828e9b1dfa40ab436
   CwlCatchException: 7acc161b299a6de7f0a46a6ed741eae2c8b4d75a
   CwlCatchExceptionSupport: 54ccab8d8c78907b57f99717fb19d4cc3bce02dc
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
-  flutter_local_notifications: 4cde75091f6327eb8517fa068a0a5950212d2086
-  flutter_secure_storage: d33dac7ae2ea08509be337e775f6b59f1ff45f12
-  flutter_timezone: ffb07bdad3c6276af8dada0f11978d8a1f8a20bb
-  nfc_manager: d7da7cb781f7744b94df5fe9dbca904ac4a0939e
-  path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
-  shared_preferences_foundation: fcdcbc04712aee1108ac7fda236f363274528f78
-  speech_to_text: 87bf9298952e8d9073be1b6aade6d5758db5170c
-  url_launcher_ios: 5334b05cef931de560670eeae103fd3e431ac3fe
+  flutter_local_notifications: ad39620c743ea4c15127860f4b5641649a988100
+  flutter_secure_storage: 1ed9476fba7e7a782b22888f956cce43e2c62f13
+  flutter_timezone: ee50ce7786b5fde27e2fe5375bbc8c9661ffc13f
+  gal: baecd024ebfd13c441269ca7404792a7152fde89
+  path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
+  shared_preferences_foundation: 9e1978ff2562383bd5676f64ec4e9aa8fa06a6f7
+  speech_to_text: 3b313d98516d3d0406cea424782ec25470c59d19
+  url_launcher_ios: 694010445543906933d732453a59da0a173ae33d
 
 PODFILE CHECKSUM: 3608f08ee955794a01a42c0059663fc255a31f07
 

@@ -21,6 +21,7 @@ class UserSettings {
   const UserSettings({
     required this.dumbPhoneAutoStart25mTimebox,
     required this.dumbPhoneOnboardingComplete,
+    required this.morningWizardLastShownYmd,
     required this.oneHandModeEnabled,
     required this.oneHandModeHand,
     required this.disableHorizontalScreenPadding,
@@ -29,6 +30,10 @@ class UserSettings {
   final bool dumbPhoneAutoStart25mTimebox;
   /// Whether the user has completed the Dumb Phone Mode onboarding flow.
   final bool dumbPhoneOnboardingComplete;
+  /// The last YYYY-MM-DD date the Morning Launch Wizard was shown.
+  ///
+  /// Used to ensure the wizard only shows once per day.
+  final String? morningWizardLastShownYmd;
   final bool oneHandModeEnabled;
   final OneHandModeHand oneHandModeHand;
   final bool disableHorizontalScreenPadding;
@@ -36,6 +41,7 @@ class UserSettings {
   UserSettings copyWith({
     bool? dumbPhoneAutoStart25mTimebox,
     bool? dumbPhoneOnboardingComplete,
+    String? morningWizardLastShownYmd,
     bool? oneHandModeEnabled,
     OneHandModeHand? oneHandModeHand,
     bool? disableHorizontalScreenPadding,
@@ -45,6 +51,8 @@ class UserSettings {
           dumbPhoneAutoStart25mTimebox ?? this.dumbPhoneAutoStart25mTimebox,
       dumbPhoneOnboardingComplete:
           dumbPhoneOnboardingComplete ?? this.dumbPhoneOnboardingComplete,
+      morningWizardLastShownYmd:
+          morningWizardLastShownYmd ?? this.morningWizardLastShownYmd,
       oneHandModeEnabled: oneHandModeEnabled ?? this.oneHandModeEnabled,
       oneHandModeHand: oneHandModeHand ?? this.oneHandModeHand,
       disableHorizontalScreenPadding:
@@ -67,6 +75,8 @@ class UserSettingsController extends StateNotifier<UserSettings> {
                 _prefs.getBool(_kDumbPhoneAutoStart25mTimebox) ?? false,
             dumbPhoneOnboardingComplete:
                 _prefs.getBool(_kDumbPhoneOnboardingComplete) ?? false,
+            morningWizardLastShownYmd:
+                _prefs.getString(_kMorningWizardLastShownYmd),
             oneHandModeEnabled: _prefs.getBool(_kOneHandModeEnabled) ?? false,
             oneHandModeHand: OneHandModeHand.fromString(
               _prefs.getString(_kOneHandModeHand),
@@ -82,6 +92,8 @@ class UserSettingsController extends StateNotifier<UserSettings> {
       'settings_dumb_phone_auto_start_25m_timebox';
   static const _kDumbPhoneOnboardingComplete =
       'settings_dumb_phone_onboarding_complete_v1';
+  static const _kMorningWizardLastShownYmd =
+      'settings_morning_wizard_last_shown_ymd_v1';
   static const _kOneHandModeEnabled = 'settings_one_hand_mode_enabled';
   static const _kOneHandModeHand = 'settings_one_hand_mode_hand';
   static const _kDisableHorizontalScreenPadding =
@@ -95,6 +107,15 @@ class UserSettingsController extends StateNotifier<UserSettings> {
   Future<void> setDumbPhoneOnboardingComplete(bool complete) async {
     state = state.copyWith(dumbPhoneOnboardingComplete: complete);
     await _prefs.setBool(_kDumbPhoneOnboardingComplete, complete);
+  }
+
+  Future<void> setMorningWizardLastShownYmd(String? ymd) async {
+    state = state.copyWith(morningWizardLastShownYmd: ymd);
+    if (ymd == null || ymd.trim().isEmpty) {
+      await _prefs.remove(_kMorningWizardLastShownYmd);
+      return;
+    }
+    await _prefs.setString(_kMorningWizardLastShownYmd, ymd.trim());
   }
 
   Future<void> setOneHandModeEnabled(bool enabled) async {

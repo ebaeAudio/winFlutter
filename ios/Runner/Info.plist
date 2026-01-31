@@ -32,23 +32,33 @@
 				<string>winflutter</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>wintheyear.deeplink</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>wintheyear</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NFCReaderUsageDescription</key>
-	<string>Win The Year uses NFC to scan NDEF tags (including NTAG215) for device setup and focus workflows.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_dartobservatory._tcp</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Win The Year uses the camera for a "clown check" when ending Dumb Phone Mode early. A photo is saved on your device.</string>
 	<key>NSFamilyControlsUsageDescription</key>
 	<string>Win The Year needs access to Screen Time to help you block distracting apps and stay focused during focus mode. This allows the app to restrict access to apps you choose.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Win The Year uses the camera for a “clown check” when ending Dumb Phone Mode early. A photo is saved on your device.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Win The Year uses the local network for debugging during development.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Win The Year uses the microphone so you can speak tasks, habits, and reflections hands-free.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Win The Year saves "clown check" photos to your Photo Library when you end Dumb Phone Mode early.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Win The Year uses speech recognition to turn what you say into tasks, habits, and reflections.</string>
 	<key>UIApplicationSceneManifest</key>
@@ -72,6 +82,10 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

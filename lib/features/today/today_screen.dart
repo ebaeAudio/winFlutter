@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -16,10 +15,12 @@ import '../../assistant/assistant_client.dart';
 import '../../assistant/assistant_executor.dart';
 import '../../data/trackers/tracker_models.dart';
 import '../../data/tasks/task_details_providers.dart';
+import '../../data/tasks/task_realtime_provider.dart';
 import '../../ui/app_scaffold.dart';
 import '../../ui/components/assistant_preview_sheet.dart';
 import '../../ui/components/empty_state_card.dart';
 import '../../ui/components/conversation_border.dart';
+import '../../ui/components/primary_cta.dart';
 import '../../ui/components/section_header.dart';
 import '../../ui/components/task_details_sheet.dart';
 import '../../ui/spacing.dart';
@@ -30,7 +31,6 @@ import 'dashboard/dashboard_layout_controller.dart';
 import 'dashboard/dashboard_section_id.dart';
 import 'today_controller.dart';
 import 'today_models.dart';
-import 'today_trackers_controller.dart';
 import 'today_timebox_controller.dart';
 import 'widgets/starter_step_editor_sheet.dart';
 
@@ -71,7 +71,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   final _assistantController = TextEditingController();
   final _assistantFocus = FocusNode();
   bool _assistantLoading = false;
-  String? _assistantSay;
   bool _isCustomizingDashboard = false;
 
   final SpeechToText _speech = SpeechToText();
@@ -465,11 +464,21 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final friendly = DateFormat('EEE, MMM d').format(_date);
     final isToday = _isSameDay(_date, now);
 
+    // Listen for realtime task changes from other devices.
+    // When a change is detected for this date, refresh the task list.
+    ref.listen<AsyncValue<TaskChangeEvent?>>(
+      taskRealtimeChangesProvider,
+      (previous, next) {
+        final event = next.valueOrNull;
+        if (event != null && taskChangeAffectsDate(event, ymd)) {
+          debugPrint('[TodayScreen] Refreshing tasks due to realtime event: $event');
+          ref.read(todayControllerProvider(ymd).notifier).refreshTasks();
+        }
+      },
+    );
+
     final today = ref.watch(todayControllerProvider(ymd));
     final controller = ref.read(todayControllerProvider(ymd).notifier);
-    final trackersData = ref.watch(todayTrackersControllerProvider(ymd));
-    final trackersController =
-        ref.read(todayTrackersControllerProvider(ymd).notifier);
     final activeSession = ref.watch(activeFocusSessionProvider).valueOrNull;
     final activeTimebox = ref.watch(todayTimeboxControllerProvider(ymd));
     final env = ref.watch(envProvider);
@@ -494,9 +503,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         today.tasks.where((t) => t.type == TodayTaskType.mustWin).toList();
     final niceTodos =
         today.tasks.where((t) => t.type == TodayTaskType.niceToDo).toList();
-    final habits = today.habits;
-    final habitDoneCount = habits.where((h) => h.completed).length;
-
     TodayTask? focusTask;
     if (today.focusTaskId != null) {
       for (final t in today.tasks) {
@@ -574,7 +580,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         return RepaintBoundary(
           key: sectionKey,
           child: Padding(
-            padding: const EdgeInsets.only(bottom: AppSpace.s16),
+            // 12px vertical rhythm between sections
+            padding: const EdgeInsets.only(bottom: AppSpace.s12),
             child: child,
           ),
         );
@@ -582,149 +589,66 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
       switch (id) {
         case DashboardSectionId.date:
+          // Compact date header: "Thu, Jan 29 • 2026-01-29" with small nav
+          final compactDateLabel = '$friendly • $ymd';
           return wrap(
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Only show header when editing (for drag handle).
-                if (editing)
-                  buildHeader('Date', editing: editing, index: index),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpace.s16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                friendly,
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                              Gap.h4,
-                              Text(
-                                ymd,
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
+                // Compact date row with icon buttons
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpace.s4),
+                  child: Row(
+                    children: [
+                      // Prev day button
+                      IconButton(
+                        onPressed: () => setState(
+                            () => _date = _date.subtract(const Duration(days: 1))),
+                        icon: const Icon(Icons.chevron_left),
+                        tooltip: 'Previous day',
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(44, 44),
+                        ),
+                      ),
+                      // Date label (tappable to open picker)
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: _pickDate,
+                          child: Text(
+                            compactDateLabel,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                        Gap.h16,
-                        Center(
-                          child: Wrap(
-                            spacing: AppSpace.s8,
-                            runSpacing: AppSpace.s8,
-                            alignment: WrapAlignment.center,
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: () => setState(() => _date =
-                                    _date.subtract(const Duration(days: 1))),
-                                icon: const Icon(Icons.chevron_left),
-                                label: const Text('Prev'),
-                              ),
-                              if (!isToday)
-                                FilledButton.icon(
-                                  onPressed: () => setState(() => _date = now),
-                                  icon: const Icon(Icons.today),
-                                  label: const Text('Go to Now'),
-                                ),
-                              OutlinedButton.icon(
-                                onPressed: () => setState(() => _date =
-                                    _date.add(const Duration(days: 1))),
-                                icon: const Icon(Icons.chevron_right),
-                                label: const Text('Next'),
-                              ),
-                            ],
+                      ),
+                      // Next day button
+                      IconButton(
+                        onPressed: () => setState(
+                            () => _date = _date.add(const Duration(days: 1))),
+                        icon: const Icon(Icons.chevron_right),
+                        tooltip: 'Next day',
+                        style: IconButton.styleFrom(
+                          minimumSize: const Size(44, 44),
+                        ),
+                      ),
+                      // Go to today (only shown when not viewing today)
+                      if (!isToday)
+                        IconButton(
+                          onPressed: () => setState(() => _date = now),
+                          icon: const Icon(Icons.today),
+                          tooltip: 'Go to today',
+                          style: IconButton.styleFrom(
+                            minimumSize: const Size(44, 44),
                           ),
                         ),
+                      // Drag handle when editing
+                      if (editing) ...[
+                        Gap.w8,
+                        _DashboardDragHandle(index: index),
                       ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-
-        case DashboardSectionId.assistant:
-          return wrap(
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                buildHeader('Assistant', editing: editing, index: index),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpace.s12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        TextField(
-                          controller: _assistantController,
-                          focusNode: _assistantFocus,
-                          textInputAction: TextInputAction.send,
-                          minLines: 1,
-                          maxLines: 2,
-                          onSubmitted: (_) => _runAssistant(
-                            assistantClient: assistantClient,
-                            baseDate: _date,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'Ex: add must win task: renew passport',
-                            isDense: true,
-                            suffixIcon: _assistantLoading
-                                ? const Padding(
-                                    padding: EdgeInsets.all(AppSpace.s12),
-                                    child: SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2),
-                                    ),
-                                  )
-                                : IconButton(
-                                    tooltip: 'Run assistant',
-                                    onPressed: _assistantLoading
-                                        ? null
-                                        : () => _runAssistant(
-                                              assistantClient: assistantClient,
-                                              baseDate: _date,
-                                            ),
-                                    icon: const Icon(Icons.send),
-                                  ),
-                          ),
-                          enabled: !_assistantLoading,
-                        ),
-                        if (_assistantListening) ...[
-                          Gap.h8,
-                          Text(
-                            'Listening…',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                        if ((_assistantSay ?? '').trim().isNotEmpty) ...[
-                          Gap.h8,
-                          Text(
-                            _assistantSay!,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                        if ((_assistantSpeechError ?? '').trim().isNotEmpty) ...[
-                          Gap.h8,
-                          Text(
-                            _assistantSpeechError!,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                    color:
-                                        Theme.of(context).colorScheme.error),
-                          ),
-                        ],
-                      ],
-                    ),
+                    ],
                   ),
                 ),
               ],
@@ -736,79 +660,73 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                buildHeader(
-                  'Focus',
-                  editing: editing,
-                  index: index,
+                // Header with compact switch
+                SectionHeader(
+                  title: 'Focus',
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(today.focusModeEnabled ? 'On' : 'Off'),
-                      Gap.w8,
-                      Switch.adaptive(
-                        value: today.focusModeEnabled,
-                        onChanged: (v) => controller.setFocusModeEnabled(v),
+                      Transform.scale(
+                        scale: 0.85,
+                        child: Switch.adaptive(
+                          value: today.focusModeEnabled,
+                          onChanged: (v) => controller.setFocusModeEnabled(v),
+                        ),
                       ),
+                      if (editing) ...[
+                        Gap.w8,
+                        _DashboardDragHandle(index: index),
+                      ],
                     ],
                   ),
                 ),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpace.s16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (showActiveFocusTimer) ...[
-                          _ActiveFocusTimerCard(
-                            ymd: ymd,
-                            timer: activeTimebox,
-                            taskTitle: timeboxTask?.title,
-                          ),
-                          Gap.h12,
-                        ],
-                        Text(
-                          'One thing now',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w800),
+                // Active timer (when running)
+                if (showActiveFocusTimer) ...[
+                  _ActiveFocusTimerCard(
+                    ymd: ymd,
+                    timer: activeTimebox,
+                    taskTitle: timeboxTask?.title,
+                  ),
+                  Gap.h12,
+                ],
+                // Content based on focus mode state
+                if (!today.focusModeEnabled) ...[
+                  // Helper text (muted)
+                  Text(
+                    'Turn this on when feeling stuck or scattered.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
-                        Gap.h8,
-                        Text(
-                          today.focusModeEnabled
-                              ? 'Hide the noise. Just do the next tiny step.'
-                              : 'Turn this on when you’re feeling stuck or scattered.',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        Gap.h12,
-                        if (!today.focusModeEnabled)
-                          Wrap(
-                            spacing: AppSpace.s8,
-                            runSpacing: AppSpace.s8,
-                            children: [
-                              FilledButton.icon(
-                                onPressed: mustWins.isEmpty
-                                    ? null
-                                    : () {
-                                        controller.setFocusModeEnabled(true);
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                              content: Text('Focus mode on')),
-                                        );
-                                      },
-                                icon: const Icon(Icons.center_focus_strong),
-                                label: const Text('Start focus'),
-                              ),
-                              OutlinedButton.icon(
-                                onPressed: () => _scrollToQuickAdd(context),
-                                icon: const Icon(Icons.add),
-                                label: const Text('Add a Must‑Win'),
-                              ),
-                            ],
-                          )
-                        else
-                          _FocusActionLane(
+                  ),
+                  Gap.h12,
+                  // Primary CTA: Start focus
+                  PrimaryCTA(
+                    label: 'Start focus',
+                    icon: Icons.center_focus_strong,
+                    onPressed: mustWins.isEmpty
+                        ? null
+                        : () {
+                            controller.setFocusModeEnabled(true);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Focus mode on')),
+                            );
+                          },
+                  ),
+                  Gap.h8,
+                  // Secondary: Add a Must-Win
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _scrollToQuickAdd(context),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add a Must-Win'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 48),
+                      ),
+                    ),
+                  ),
+                ] else
+                  _FocusActionLane(
                             focusTask: focusTask,
                             taskDetailsRepoPresent: taskDetailsRepo != null,
                             ymd: ymd,
@@ -905,11 +823,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                       },
                                     );
                                   },
-                          ),
-                      ],
-                    ),
                   ),
-                ),
               ],
             ),
           );
@@ -976,246 +890,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             ),
           );
 
+        case DashboardSectionId.assistant:
         case DashboardSectionId.habits:
-          return wrap(
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                buildHeader(
-                  'Habits',
-                  editing: editing,
-                  index: index,
-                  trailing: Text('$habitDoneCount/${habits.length}'),
-                ),
-                if (habits.isEmpty)
-                  EmptyStateCard(
-                    icon: Icons.repeat,
-                    title: 'Add a habit to track',
-                    description:
-                        'Habits are recurring. You can mark them complete for the selected day.',
-                    ctaLabel: 'Add a habit',
-                    onCtaPressed: () {
-                      _habitAddController.clear();
-                      showDialog<void>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('New habit'),
-                          content: TextField(
-                            controller: _habitAddController,
-                            autofocus: true,
-                            decoration:
-                                const InputDecoration(labelText: 'Habit name'),
-                            textInputAction: TextInputAction.done,
-                            onSubmitted: (_) => Navigator.of(context).pop(),
-                          ),
-                          actions: [
-                            TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: const Text('Cancel')),
-                            FilledButton(
-                                onPressed: () async {
-                                  final ok = await controller.addHabit(
-                                      name: _habitAddController.text);
-                                  if (!context.mounted) return;
-                                  Navigator.of(context).pop();
-                                  if (ok) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text('Habit added')),
-                                    );
-                                  }
-                                },
-                                child: const Text('Add')),
-                          ],
-                        ),
-                      );
-                    },
-                  )
-                else
-                  Card(
-                    child: Padding(
-                      padding:
-                          const EdgeInsets.symmetric(vertical: AppSpace.s8),
-                      child: Column(
-                        children: [
-                          for (final h in habits)
-                            CheckboxListTile(
-                              value: h.completed,
-                              onChanged: (v) async {
-                                final next = v == true;
-                                await controller.setHabitCompleted(
-                                  habitId: h.id,
-                                  completed: next,
-                                );
-                                if (next) {}
-                              },
-                              title: Text(h.name),
-                            ),
-                          Padding(
-                            padding: const EdgeInsets.all(AppSpace.s12),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: _habitAddController,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Add habit',
-                                      hintText: 'Ex: Walk 20 minutes',
-                                    ),
-                                    textInputAction: TextInputAction.done,
-                                    onSubmitted: (_) async {
-                                      final ok = await controller.addHabit(
-                                          name: _habitAddController.text);
-                                      if (!ok) return;
-                                      _habitAddController.clear();
-                                      if (!context.mounted) return;
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        const SnackBar(
-                                            content: Text('Habit added')),
-                                      );
-                                    },
-                                  ),
-                                ),
-                                Gap.w8,
-                                FilledButton(
-                                  onPressed: () async {
-                                    final ok = await controller.addHabit(
-                                        name: _habitAddController.text);
-                                    if (!ok) return;
-                                    _habitAddController.clear();
-                                    if (!context.mounted) return;
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text('Habit added')),
-                                    );
-                                  },
-                                  child: const Text('Add'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          );
-
         case DashboardSectionId.trackers:
-          return wrap(
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                buildHeader('Trackers', editing: editing, index: index),
-                if (trackersData.isLoading)
-                  const Center(child: CircularProgressIndicator())
-                else if (trackersData.trackers.isEmpty)
-                  EmptyStateCard(
-                    icon: Icons.emoji_objects_outlined,
-                    title: 'Add a tracker',
-                    description:
-                        'Create a custom tracker (3 items) and tap here to tally quickly.',
-                    ctaLabel: 'Add tracker',
-                    onCtaPressed: () => context.go('/settings/trackers'),
-                  )
-                else
-                  Column(
-                    children: [
-                      if ((trackersData.error ?? '').trim().isNotEmpty) ...[
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(AppSpace.s12),
-                            child: Text('Tracker error: ${trackersData.error}'),
-                          ),
-                        ),
-                        Gap.h12,
-                      ],
-                      for (final t in trackersData.trackers) ...[
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: AppSpace.s8),
-                            child: Column(
-                              children: [
-                                ListTile(
-                                  title: Text(
-                                    t.tracker.name,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(fontWeight: FontWeight.w800),
-                                  ),
-                                  subtitle: const Text(
-                                      'Tap to add. Long-press to undo.'),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                      AppSpace.s12,
-                                      0,
-                                      AppSpace.s12,
-                                      AppSpace.s12),
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      final isNarrow =
-                                          constraints.maxWidth < 420;
-                                      final tileWidth = isNarrow
-                                          ? constraints.maxWidth
-                                          : ((constraints.maxWidth -
-                                                  AppSpace.s12) /
-                                              2);
-                                      return Wrap(
-                                        spacing: AppSpace.s12,
-                                        runSpacing: AppSpace.s12,
-                                        children: [
-                                          for (final it in t.items)
-                                            SizedBox(
-                                              width: tileWidth,
-                                              child: _TrackerTallyTile(
-                                                emoji: it.item.emoji,
-                                                title: it.item.description,
-                                                subtitle: it.item.hasTarget
-                                                    ? _targetLabel(
-                                                        it.item.targetCadence,
-                                                      )
-                                                    : null,
-                                                count: it.todayCount,
-                                                progress: it.item.hasTarget
-                                                    ? '${it.progressCount}/${it.item.targetValue}'
-                                                    : null,
-                                                onIncrement: () async {
-                                                  await trackersController
-                                                      .increment(
-                                                    trackerId: t.tracker.id,
-                                                    itemKey: it.item.key,
-                                                  );
-                                                },
-                                                onDecrement: () async {
-                                                  await trackersController
-                                                      .decrement(
-                                                    trackerId: t.tracker.id,
-                                                    itemKey: it.item.key,
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Gap.h12,
-                      ],
-                    ],
-                  ),
-              ],
-            ),
-          );
+          return const SizedBox.shrink();
 
         case DashboardSectionId.mustWins:
           return wrap(
@@ -1610,7 +1288,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
     setState(() {
       _assistantLoading = true;
-      _assistantSay = null;
     });
 
     final baseYmd = DateFormat('yyyy-MM-dd').format(baseDate);
@@ -1622,7 +1299,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       );
 
       if (!mounted) return;
-      setState(() => _assistantSay = translation.say);
+      setState(() {});
 
       final hasAction = translation.commands.any(
         (c) => c.kind != 'date.shift' && c.kind != 'date.set',

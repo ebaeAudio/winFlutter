@@ -13,6 +13,7 @@ AllTask _t({
   required bool completed,
   bool inProgress = false,
   required int createdAtMs,
+  DateTime? snoozedUntil,
 }) {
   return AllTask(
     id: id,
@@ -23,6 +24,7 @@ AllTask _t({
     completed: completed,
     inProgress: inProgress,
     createdAtMs: createdAtMs,
+    snoozedUntil: snoozedUntil,
   );
 }
 

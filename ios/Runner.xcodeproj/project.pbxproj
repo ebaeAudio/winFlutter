@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -18,6 +18,10 @@
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		B1C2D3E4F5061728394A5B6C /* RestrictionEnginePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* RestrictionEnginePlugin.swift */; };
 		B7F1E3C2D4B5968778695A4B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F1E3C2D4B5968778695A4B /* SceneDelegate.swift */; };
+		C72E016F2F21B32500721EB3 /* ManagedSettings.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C72E01512F20417C00721EB3 /* ManagedSettings.framework */; };
+		C72E01702F21B32500721EB3 /* ManagedSettingsUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C72E01532F20417D00721EB3 /* ManagedSettingsUI.framework */; };
+		C72E01782F21B32500721EB3 /* WinTheYearShieldConfig.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C72E016E2F21B32500721EB3 /* WinTheYearShieldConfig.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E5F60718293A4B5C6D7E8F91 /* PushNotificationsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5F60718293A4B5C6D7E8F90 /* PushNotificationsPlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -27,6 +31,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
+		};
+		C72E01762F21B32500721EB3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C72E016D2F21B32500721EB3;
+			remoteInfo = WinTheYearShieldConfig;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -39,6 +50,17 @@
 			files = (
 			);
 			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C72E015D2F20417D00721EB3 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				C72E01782F21B32500721EB3 /* WinTheYearShieldConfig.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -69,9 +91,45 @@
 		A7F1E3C2D4B5968778695A4B /* SceneDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		C0FFEE000000000000000001 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		C0FFEE000000000000000002 /* Profile.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Profile.xcconfig; path = Flutter/Profile.xcconfig; sourceTree = "<group>"; };
+		C72E01512F20417C00721EB3 /* ManagedSettings.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ManagedSettings.framework; path = System/Library/Frameworks/ManagedSettings.framework; sourceTree = SDKROOT; };
+		C72E01532F20417D00721EB3 /* ManagedSettingsUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ManagedSettingsUI.framework; path = System/Library/Frameworks/ManagedSettingsUI.framework; sourceTree = SDKROOT; };
+		C72E016E2F21B32500721EB3 /* WinTheYearShieldConfig.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WinTheYearShieldConfig.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		C84FF031608667694AE51DDD /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1A2B3C4E5F6071800000002 /* ShieldConfigurationExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShieldConfigurationExtension.swift; sourceTree = "<group>"; };
+		D1A2B3C4E5F6071800000004 /* ShieldConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShieldConfig.swift; sourceTree = "<group>"; };
+		D1A2B3C4E5F6071800000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D1A2B3C4E5F6071800000006 /* WinTheYearShieldConfig.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = WinTheYearShieldConfig.entitlements; sourceTree = "<group>"; };
+		E5F60718293A4B5C6D7E8F90 /* PushNotificationsPlugin.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PushNotificationsPlugin.swift; sourceTree = "<group>"; };
 		F28E9B58693F8A612FB71FFB /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C72E01832F21B41200721EB3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				ShieldTaskData.swift,
+			);
+			target = 97C146ED1CF9000F007C117D /* Runner */;
+		};
+		C72E01882F21B42C00721EB3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				ShieldTaskData.swift,
+			);
+			target = 331C8080294A63A400263BE5 /* RunnerTests */;
+		};
+		C72E01AC2F21B63E00721EB3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C72E016D2F21B32500721EB3 /* WinTheYearShieldConfig */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		C72E01712F21B32500721EB3 /* WinTheYearShieldConfig */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (C72E01832F21B41200721EB3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, C72E01882F21B42C00721EB3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, C72E01AC2F21B63E00721EB3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = WinTheYearShieldConfig; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		97C146EB1CF9000F007C117D /* Frameworks */ = {
@@ -87,6 +145,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				140A7E7B7DAD113D767D2572 /* Pods_RunnerTests.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C72E016B2F21B32500721EB3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C72E016F2F21B32500721EB3 /* ManagedSettings.framework in Frameworks */,
+				C72E01702F21B32500721EB3 /* ManagedSettingsUI.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -131,8 +198,10 @@
 			children = (
 				9740EEB11CF90186004384FC /* Flutter */,
 				97C146F01CF9000F007C117D /* Runner */,
+				C72E01712F21B32500721EB3 /* WinTheYearShieldConfig */,
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
+				D1A2B3C4E5F6071800000007 /* WinTheYearShieldConfig */,
 				897227F9464568D445787EF8 /* Pods */,
 				ABFD08D158573E6B41FDE4FA /* Frameworks */,
 			);
@@ -143,6 +212,7 @@
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
+				C72E016E2F21B32500721EB3 /* WinTheYearShieldConfig.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -160,6 +230,7 @@
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				A7F1E3C2D4B5968778695A4B /* SceneDelegate.swift */,
 				A1B2C3D4E5F60718293A4B5C /* RestrictionEnginePlugin.swift */,
+				E5F60718293A4B5C6D7E8F90 /* PushNotificationsPlugin.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -170,8 +241,21 @@
 			children = (
 				A1286CB65962157FC748B8D7 /* Pods_Runner.framework */,
 				C84FF031608667694AE51DDD /* Pods_RunnerTests.framework */,
+				C72E01512F20417C00721EB3 /* ManagedSettings.framework */,
+				C72E01532F20417D00721EB3 /* ManagedSettingsUI.framework */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		D1A2B3C4E5F6071800000007 /* WinTheYearShieldConfig */ = {
+			isa = PBXGroup;
+			children = (
+				D1A2B3C4E5F6071800000002 /* ShieldConfigurationExtension.swift */,
+				D1A2B3C4E5F6071800000004 /* ShieldConfig.swift */,
+				D1A2B3C4E5F6071800000005 /* Info.plist */,
+				D1A2B3C4E5F6071800000006 /* WinTheYearShieldConfig.entitlements */,
+			);
+			path = WinTheYearShieldConfig;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -206,17 +290,39 @@
 				97C146EB1CF9000F007C117D /* Frameworks */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
+				C72E015D2F20417D00721EB3 /* Embed Foundation Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				48D6BDB0C6D146ED31B550A7 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				C72E01772F21B32500721EB3 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
+		};
+		C72E016D2F21B32500721EB3 /* WinTheYearShieldConfig */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C72E017D2F21B32500721EB3 /* Build configuration list for PBXNativeTarget "WinTheYearShieldConfig" */;
+			buildPhases = (
+				C72E016A2F21B32500721EB3 /* Sources */,
+				C72E016B2F21B32500721EB3 /* Frameworks */,
+				C72E016C2F21B32500721EB3 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				C72E01712F21B32500721EB3 /* WinTheYearShieldConfig */,
+			);
+			name = WinTheYearShieldConfig;
+			productName = WinTheYearShieldConfig;
+			productReference = C72E016E2F21B32500721EB3 /* WinTheYearShieldConfig.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -225,6 +331,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 1510;
 				ORGANIZATIONNAME = "";
 				TargetAttributes = {
@@ -235,6 +342,9 @@
 					97C146ED1CF9000F007C117D = {
 						CreatedOnToolsVersion = 7.3.1;
 						LastSwiftMigration = 1100;
+					};
+					C72E016D2F21B32500721EB3 = {
+						CreatedOnToolsVersion = 26.2;
 					};
 				};
 			};
@@ -253,6 +363,7 @@
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
+				C72E016D2F21B32500721EB3 /* WinTheYearShieldConfig */,
 			);
 		};
 /* End PBXProject section */
@@ -273,6 +384,13 @@
 				3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */,
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C72E016C2F21B32500721EB3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -325,9 +443,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -390,6 +512,14 @@
 				B7F1E3C2D4B5968778695A4B /* SceneDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				B1C2D3E4F5061728394A5B6C /* RestrictionEnginePlugin.swift in Sources */,
+				E5F60718293A4B5C6D7E8F91 /* PushNotificationsPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C72E016A2F21B32500721EB3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -400,6 +530,11 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
+		};
+		C72E01772F21B32500721EB3 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C72E016D2F21B32500721EB3 /* WinTheYearShieldConfig */;
+			targetProxy = C72E01762F21B32500721EB3 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -724,6 +859,132 @@
 			};
 			name = Release;
 		};
+		C72E01792F21B32500721EB3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = WinTheYearShieldConfig/WinTheYearShieldConfig.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W27R4MDT29;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WinTheYearShieldConfig/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WinTheYearShieldConfig;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wintheyear.winFlutter.dev.ShieldConfig;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C72E017A2F21B32500721EB3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = WinTheYearShieldConfig/WinTheYearShieldConfig.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W27R4MDT29;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WinTheYearShieldConfig/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WinTheYearShieldConfig;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wintheyear.winFlutter.dev.ShieldConfig;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		C72E017B2F21B32500721EB3 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = WinTheYearShieldConfig/WinTheYearShieldConfig.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W27R4MDT29;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WinTheYearShieldConfig/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WinTheYearShieldConfig;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.wintheyear.winFlutter.dev.ShieldConfig;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -753,6 +1014,16 @@
 				97C147061CF9000F007C117D /* Debug */,
 				97C147071CF9000F007C117D /* Release */,
 				249021D4217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C72E017D2F21B32500721EB3 /* Build configuration list for PBXNativeTarget "WinTheYearShieldConfig" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C72E01792F21B32500721EB3 /* Debug */,
+				C72E017A2F21B32500721EB3 /* Release */,
+				C72E017B2F21B32500721EB3 /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
