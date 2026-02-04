@@ -30,5 +30,5 @@ Future<void> main() async {
   );
   await bootstrap(container);
   runApp(
-      UncontrolledProviderScope(container: container, child: const AppRoot()));
+      UncontrolledProviderScope(container: container, child: const AppRoot()),);
 }

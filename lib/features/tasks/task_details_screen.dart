@@ -114,7 +114,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
   }
 
   Future<void> _clearGoalDate(
-      {required String ymd, required String taskId}) async {
+      {required String ymd, required String taskId,}) async {
     await ref
         .read(todayControllerProvider(ymd).notifier)
         .setTaskGoalDate(taskId, null);
@@ -192,7 +192,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
   }
 
   void _seedFromRepo(
-      {required TaskDetails details, required List<TaskSubtask> subtasks}) {
+      {required TaskDetails details, required List<TaskSubtask> subtasks,}) {
     _notes = details.notes ?? '';
     _nextStep = details.nextStep ?? '';
     _estimateMinutes = details.estimateMinutes;
@@ -207,9 +207,9 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
 
   void _seedFromTodayTask(TodayTask t) {
     _titleController.text = t.title;
-    _notes = t.notes ?? '';
-    _nextStep = t.nextStep ?? '';
-    _estimateMinutes = t.estimateMinutes;
+    _notes = t.details ?? '';
+    _nextStep = t.starterStep ?? '';
+    _estimateMinutes = t.estimatedMinutes;
     _actualMinutes = t.actualMinutes;
     _subtasks = [
       for (final s in t.subtasks)
@@ -391,7 +391,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
         await repo.deleteSubtask(subtaskId: s.id);
         if (!mounted) return;
         setState(
-            () => _subtasks = _subtasks.where((x) => x.id != s.id).toList());
+            () => _subtasks = _subtasks.where((x) => x.id != s.id).toList(),);
         return;
       }
 
@@ -492,7 +492,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(_loadError!,
-                      style: Theme.of(context).textTheme.bodyLarge),
+                      style: Theme.of(context).textTheme.bodyLarge,),
                   Gap.h12,
                   FilledButton.icon(
                     onPressed: _load,
@@ -515,7 +515,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                 }
 
                 final issueAsync = ref.watch(
-                    linearIssueByIdentifierProvider(linearRef.identifier));
+                    linearIssueByIdentifierProvider(linearRef.identifier),);
                 return issueAsync.when(
                   loading: () => _buildLinearLoadingState(),
                   error: (e, _) => _buildLinearErrorState(context, e),
@@ -546,7 +546,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                 style: Theme.of(context)
                     .textTheme
                     .bodyMedium
-                    ?.copyWith(color: Theme.of(context).colorScheme.error)),
+                    ?.copyWith(color: Theme.of(context).colorScheme.error),),
           ],
           Gap.h16,
           Card(
@@ -561,7 +561,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w800)),
+                          ?.copyWith(fontWeight: FontWeight.w800),),
                   if (linearRef != null) ...[
                     Gap.h4,
                     Text(
@@ -597,7 +597,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w800)),
+                          ?.copyWith(fontWeight: FontWeight.w800),),
                   Gap.h8,
                   Row(
                     children: [
@@ -647,7 +647,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                       style: Theme.of(context)
                           .textTheme
                           .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w800)),
+                          ?.copyWith(fontWeight: FontWeight.w800),),
                   Gap.h8,
                   Row(
                     children: [
@@ -771,7 +771,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
             Text(error.toString(),
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Theme.of(context).colorScheme.error,
-                    )),
+                    ),),
           ],
         ),
       ),
@@ -779,7 +779,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
   }
 
   Widget _buildLinearNotFoundState(
-      BuildContext context, LinearIssueRef linearRef) {
+      BuildContext context, LinearIssueRef linearRef,) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpace.s16),
@@ -920,6 +920,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                   } catch (e) {
                     if (!mounted) return;
                     setState(() => _saveError = friendlyError(e));
+                    if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(friendlyError(e))),
                     );
@@ -940,6 +941,7 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
                   } catch (e) {
                     if (!mounted) return;
                     setState(() => _saveError = friendlyError(e));
+                    if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text(friendlyError(e))),
                     );
@@ -950,9 +952,9 @@ class _TaskDetailsScreenState extends ConsumerState<TaskDetailsScreen> {
           SegmentedButton<TodayTaskType>(
             segments: const [
               ButtonSegment(
-                  value: TodayTaskType.mustWin, label: Text('Must‑Win')),
+                  value: TodayTaskType.mustWin, label: Text('Must‑Win'),),
               ButtonSegment(
-                  value: TodayTaskType.niceToDo, label: Text('Nice‑to‑Do')),
+                  value: TodayTaskType.niceToDo, label: Text('Nice‑to‑Do'),),
             ],
             selected: {task.type},
             onSelectionChanged: (s) => ref

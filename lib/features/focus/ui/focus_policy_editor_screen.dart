@@ -182,7 +182,7 @@ class _FocusPolicyEditorScreenState
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text(
-                                      'Updated iOS blocked apps selection'),
+                                      'Updated iOS blocked apps selection',),
                                 ),
                               );
                             } catch (e) {
@@ -303,7 +303,7 @@ class _FrictionEditorState extends State<_FrictionEditor> {
               max: 10,
               onChanged: (v) {
                 setState(
-                    () => _f = _f.copyWith(maxEmergencyUnlocksPerSession: v));
+                    () => _f = _f.copyWith(maxEmergencyUnlocksPerSession: v),);
                 widget.onChanged(_f);
               },
             ),

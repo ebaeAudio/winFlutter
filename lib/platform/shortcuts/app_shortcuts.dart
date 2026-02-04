@@ -187,7 +187,7 @@ class AppShortcuts {
         const SingleActivator(LogicalKeyboardKey.keyN, meta: true, shift: true):
             const NewMustWinIntent(),
         const SingleActivator(
-            LogicalKeyboardKey.keyN, control: true, shift: true):
+            LogicalKeyboardKey.keyN, control: true, shift: true,):
             const NewMustWinIntent(),
 
         // ─────────────────────────────────────────────────────────────────────
@@ -219,7 +219,7 @@ class AppShortcuts {
         const SingleActivator(LogicalKeyboardKey.keyF, meta: true, shift: true):
             const ToggleFocusModeIntent(),
         const SingleActivator(
-            LogicalKeyboardKey.keyF, control: true, shift: true):
+            LogicalKeyboardKey.keyF, control: true, shift: true,):
             const ToggleFocusModeIntent(),
 
         // ─────────────────────────────────────────────────────────────────────
@@ -228,7 +228,7 @@ class AppShortcuts {
         const SingleActivator(LogicalKeyboardKey.keyS, meta: true, shift: true):
             const ImStuckIntent(),
         const SingleActivator(
-            LogicalKeyboardKey.keyS, control: true, shift: true):
+            LogicalKeyboardKey.keyS, control: true, shift: true,):
             const ImStuckIntent(),
 
         // ─────────────────────────────────────────────────────────────────────

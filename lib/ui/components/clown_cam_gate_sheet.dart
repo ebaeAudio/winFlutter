@@ -400,7 +400,7 @@ class _ClownOverlayPainter extends CustomPainter {
     // Caption.
     final tp = TextPainter(
       text: TextSpan(
-        text: 'END EARLY MODE',
+        text: 'CERTIFIED QUITTER',
         style: _theme.textTheme.labelLarge?.copyWith(
           fontWeight: FontWeight.w900,
           letterSpacing: 1.2,

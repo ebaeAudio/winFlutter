@@ -1,19 +1,26 @@
+import 'dart:convert';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'all_tasks_models.dart';
 import 'all_tasks_repository.dart';
+import '../paginated_result.dart';
 import 'task.dart';
+import 'tasks_schema.dart';
 import 'tasks_repository.dart';
 
 class SupabaseAllTasksRepository implements AllTasksRepository {
   SupabaseAllTasksRepository({
     required SupabaseClient client,
     required TasksRepository tasksRepository,
+    required TasksSchema schema,
   })  : _client = client,
-        _tasksRepository = tasksRepository;
+        _tasksRepository = tasksRepository,
+        _schema = schema;
 
   final SupabaseClient _client;
   final TasksRepository _tasksRepository;
+  final TasksSchema _schema;
 
   String _requireUserId() {
     final session = _client.auth.currentSession;
@@ -24,40 +31,38 @@ class SupabaseAllTasksRepository implements AllTasksRepository {
     return uid;
   }
 
+  static int _decodeCursor(String? cursor) {
+    final raw = (cursor ?? '').trim();
+    if (raw.isEmpty) return 0;
+    try {
+      final decoded = utf8.decode(base64Url.decode(raw));
+      return int.tryParse(decoded) ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  static String _encodeCursor(int offset) {
+    return base64Url.encode(utf8.encode(offset.toString()));
+  }
+
   @override
-  Future<List<AllTask>> listAll() async {
+  Future<PaginatedResult<AllTask>> listAll({
+    int limit = 50,
+    String? cursor,
+  }) async {
     final uid = _requireUserId();
 
-    dynamic rows;
-    try {
-      rows = await _client
-          .from('tasks')
-          .select(
-              'id,user_id,title,goal_date,type,date,completed,in_progress,created_at,updated_at')
-          .eq('user_id', uid)
-          .order('date', ascending: true)
-          .order('created_at', ascending: true);
-    } catch (_) {
-      try {
-        // Back-compat: schema without `goal_date`.
-        rows = await _client
-            .from('tasks')
-            .select(
-                'id,user_id,title,type,date,completed,in_progress,created_at,updated_at')
-            .eq('user_id', uid)
-            .order('date', ascending: true)
-            .order('created_at', ascending: true);
-      } catch (_) {
-        // Back-compat: schema without `in_progress` (and possibly without `goal_date`).
-        rows = await _client
-            .from('tasks')
-            .select('id,user_id,title,type,date,completed,created_at,updated_at')
-            .eq('user_id', uid)
-            .order('date', ascending: true)
-            .order('created_at', ascending: true);
-      }
-    }
+    final offset = _decodeCursor(cursor);
+    final safeLimit = limit < 1 ? 1 : limit;
 
+    final rows = await _client
+        .from('tasks')
+        .select(_schema.allTasksSelectColumns)
+        .eq('user_id', uid)
+        .order('date', ascending: true)
+        .order('created_at', ascending: true)
+        .range(offset, offset + safeLimit - 1);
     final list = rows as List;
     final tasks = <AllTask>[];
     for (final row in list) {
@@ -75,7 +80,11 @@ class SupabaseAllTasksRepository implements AllTasksRepository {
         ),
       );
     }
-    return tasks;
+
+    final hasMore = list.length >= safeLimit;
+    final nextCursor =
+        hasMore ? _encodeCursor(offset + list.length) : null;
+    return PaginatedResult(items: tasks, hasMore: hasMore, nextCursor: nextCursor);
   }
 
   @override

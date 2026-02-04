@@ -53,7 +53,7 @@ class DashboardLayoutController extends StateNotifier<List<DashboardSectionId>> 
     final ids = <DashboardSectionId>[];
 
     final seen = <DashboardSectionId>{};
-    final hidden = DashboardSectionId.hiddenSectionIds;
+    const hidden = DashboardSectionId.hiddenSectionIds;
     for (final raw in stored) {
       final id = DashboardSectionId.tryParse(raw);
       if (id == null) continue;

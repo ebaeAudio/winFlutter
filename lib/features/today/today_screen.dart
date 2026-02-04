@@ -13,7 +13,6 @@ import '../../app/errors.dart';
 import '../../app/supabase.dart';
 import '../../assistant/assistant_client.dart';
 import '../../assistant/assistant_executor.dart';
-import '../../data/trackers/tracker_models.dart';
 import '../../data/tasks/task_details_providers.dart';
 import '../../data/tasks/task_realtime_provider.dart';
 import '../../ui/app_scaffold.dart';
@@ -186,93 +185,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     );
   }
 
-  Future<void> _startAssistantListening() async {
-    try {
-      if (_assistantLoading) return;
-      if (_assistantListening) return;
-
-      final ok = await _ensureSpeechReady();
-      if (!ok) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_assistantSpeechError ?? 'Speech unavailable')),
-        );
-        return;
-      }
-
-      final hasPerm = await _speech.hasPermission;
-      if (hasPerm == false) {
-        if (!mounted) return;
-        setState(() {
-          _assistantSpeechError =
-              'Microphone / Speech permission denied. Enable it in Settings and try again.';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_assistantSpeechError!)),
-        );
-        return;
-      }
-
-      // Safely handle haptic feedback (may not be supported on all platforms)
-      try {
-        HapticFeedback.selectionClick();
-      } catch (_) {
-        // Ignore haptic feedback errors
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _assistantListening = true;
-        _assistantSpeechError = null;
-        _assistantSoundLevel01 = 0.0;
-      });
-
-      try {
-        await _speech.listen(
-          onSoundLevelChange: (level) {
-            if (!mounted) return;
-            // speech_to_text typically reports ~[-2..10]. Normalize defensively.
-            final next = ((level + 2) / 12).clamp(0.0, 1.0);
-            // Light smoothing to avoid jitter.
-            final smooth = _assistantSoundLevel01 * 0.65 + next * 0.35;
-            setState(() => _assistantSoundLevel01 = smooth);
-          },
-          listenOptions: SpeechListenOptions(
-            listenMode: ListenMode.confirmation,
-            partialResults: true,
-          ),
-          onResult: (result) {
-            final words = result.recognizedWords.trim();
-            if (words.isEmpty) return;
-            _setAssistantTranscript(words);
-          },
-        );
-      } catch (e) {
-        if (!mounted) return;
-        setState(() {
-          _assistantListening = false;
-          _assistantSoundLevel01 = 0.0;
-          _assistantSpeechError = 'Speech recognition error. Please try again.';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(_assistantSpeechError!)),
-        );
-      }
-    } catch (e, stackTrace) {
-      // Catch any unhandled exceptions to prevent crashes
-      if (!mounted) return;
-      setState(() {
-        _assistantListening = false;
-        _assistantSoundLevel01 = 0.0;
-        _assistantSpeechError = 'Speech recognition unavailable. Please try again.';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_assistantSpeechError!)),
-      );
-      debugPrint('Speech listening error: $e');
-      debugPrint('Stack trace: $stackTrace');
-    }
-  }
 
   Future<void> _stopAssistantListening() async {
     if (!_assistantListening) return;
@@ -285,7 +197,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     if (!mounted) return;
     // Safely handle haptic feedback (may not be supported on all platforms)
     try {
-      HapticFeedback.selectionClick();
+      await HapticFeedback.selectionClick();
     } catch (_) {
       // Ignore haptic feedback errors
     }
@@ -362,7 +274,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
       // Safely handle haptic feedback (may not be supported on all platforms)
       try {
-        HapticFeedback.selectionClick();
+        await HapticFeedback.selectionClick();
       } catch (_) {
         // Ignore haptic feedback errors
       }
@@ -603,7 +515,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                       // Prev day button
                       IconButton(
                         onPressed: () => setState(
-                            () => _date = _date.subtract(const Duration(days: 1))),
+                            () => _date = _date.subtract(const Duration(days: 1)),),
                         icon: const Icon(Icons.chevron_left),
                         tooltip: 'Previous day',
                         style: IconButton.styleFrom(
@@ -626,7 +538,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                       // Next day button
                       IconButton(
                         onPressed: () => setState(
-                            () => _date = _date.add(const Duration(days: 1))),
+                            () => _date = _date.add(const Duration(days: 1)),),
                         icon: const Icon(Icons.chevron_right),
                         tooltip: 'Next day',
                         style: IconButton.styleFrom(
@@ -772,7 +684,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                 SnackBar(
                                   content: Text(ok
                                       ? 'Focus timer started ($minutes min)'
-                                      : 'Timer already running'),
+                                      : 'Timer already running',),
                                 ),
                               );
                             },
@@ -809,7 +721,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                               Navigator.of(context).pop();
                                               final picked =
                                                   await _pickFocusTask(
-                                                      context, mustWins);
+                                                      context, mustWins,);
                                               if (!context.mounted) return;
                                               if (picked == null) return;
                                               await controller
@@ -856,10 +768,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           segments: const [
                             ButtonSegment(
                                 value: TodayTaskType.mustWin,
-                                label: Text('Must‑Win')),
+                                label: Text('Must‑Win'),),
                             ButtonSegment(
                                 value: TodayTaskType.niceToDo,
-                                label: Text('Nice‑to‑Do')),
+                                label: Text('Nice‑to‑Do'),),
                           ],
                           selected: {_quickAddType},
                           onSelectionChanged: _quickAddInFlight
@@ -905,7 +817,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   editing: editing,
                   index: index,
                   trailing: Text(
-                      '${mustWins.where((t) => t.completed).length}/${mustWins.length}'),
+                      '${mustWins.where((t) => t.completed).length}/${mustWins.length}',),
                 ),
                 if (mustWins.isEmpty)
                   Column(
@@ -931,7 +843,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                       ? null
                                       : () async {
                                           setState(
-                                              () => _rolloverInFlight = true);
+                                              () => _rolloverInFlight = true,);
                                           try {
                                             final moved = await controller
                                                 .rolloverYesterdayTasks();
@@ -941,7 +853,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                               SnackBar(
                                                 content: Text(moved == 0
                                                     ? 'No tasks to roll over'
-                                                    : 'Rolled over $moved task${moved == 1 ? '' : 's'}'),
+                                                    : 'Rolled over $moved task${moved == 1 ? '' : 's'}',),
                                               ),
                                             );
                                           } catch (e) {
@@ -950,7 +862,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                                                 .showSnackBar(
                                               SnackBar(
                                                   content:
-                                                      Text(friendlyError(e))),
+                                                      Text(friendlyError(e)),),
                                             );
                                           } finally {
                                             if (mounted) {
@@ -1066,7 +978,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                   editing: editing,
                   index: index,
                   trailing: Text(
-                      '${niceTodos.where((t) => t.completed).length}/${niceTodos.length}'),
+                      '${niceTodos.where((t) => t.completed).length}/${niceTodos.length}',),
                 ),
                 if (niceTodos.isEmpty)
                   EmptyStateCard(
@@ -1267,14 +1179,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     );
   }
 
-  static String _targetLabel(TargetCadence? cadence) {
-    return switch (cadence) {
-      TargetCadence.weekly => 'Weekly target',
-      TargetCadence.yearly => 'Yearly target',
-      _ => 'Daily target',
-    };
-  }
-
   Future<void> _runAssistant({
     required AssistantClient assistantClient,
     required DateTime baseDate,
@@ -1320,6 +1224,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         if (!run) return;
       }
 
+      if (!mounted) return;
+
       const executor = AssistantExecutor();
       final result = await executor.execute(
         context: context,
@@ -1335,10 +1241,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
             actions: [
               TextButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel')),
+                  child: const Text('Cancel'),),
               FilledButton(
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Run')),
+                  child: const Text('Run'),),
             ],
           ),
         ).then((v) => v == true),
@@ -1388,7 +1294,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         SnackBar(
           content: Text(_quickAddType == TodayTaskType.mustWin
               ? 'Added to Must‑Wins'
-              : 'Added to Nice‑to‑Do'),
+              : 'Added to Nice‑to‑Do',),
         ),
       );
     } finally {
@@ -1399,7 +1305,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   }
 
   Future<String?> _pickFocusTask(
-      BuildContext context, List<TodayTask> mustWins) async {
+      BuildContext context, List<TodayTask> mustWins,) async {
     return showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -1420,7 +1326,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 ListTile(
                   leading: Icon(t.completed
                       ? Icons.check_circle
-                      : Icons.radio_button_unchecked),
+                      : Icons.radio_button_unchecked,),
                   title: Text(t.title),
                   onTap: () => Navigator.of(context).pop(t.id),
                 ),
@@ -1450,10 +1356,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel')),
+              child: const Text('Cancel'),),
           FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Save')),
+              child: const Text('Save'),),
         ],
       ),
     );
@@ -1907,13 +1813,13 @@ class _TaskRow extends StatelessWidget {
                   ),
                   const PopupMenuDivider(),
                   const PopupMenuItem(
-                      value: 'starterStep', child: Text('Starter step')),
+                      value: 'starterStep', child: Text('Starter step'),),
                   const PopupMenuDivider(),
                   const PopupMenuItem(value: 'details', child: Text('Details')),
                   const PopupMenuDivider(),
                   const PopupMenuItem(value: 'edit', child: Text('Edit')),
                   const PopupMenuItem(
-                      value: 'move', child: Text('Move to other list')),
+                      value: 'move', child: Text('Move to other list'),),
                   const PopupMenuDivider(),
                   const PopupMenuItem(value: 'delete', child: Text('Delete')),
                 ],
@@ -1924,7 +1830,7 @@ class _TaskRow extends StatelessWidget {
         if (expanded && _hasDetails)
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                AppSpace.s16, 0, AppSpace.s16, AppSpace.s12),
+                AppSpace.s16, 0, AppSpace.s16, AppSpace.s12,),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2020,7 +1926,7 @@ class _FocusActionLane extends ConsumerWidget {
       );
     }
 
-    String starterStep = task.nextStep ?? '';
+    String starterStep = task.starterStep ?? '';
     if (taskDetailsRepoPresent) {
       final detailsAsync = ref.watch(taskDetailsProvider(task.id));
       starterStep = detailsAsync.valueOrNull?.nextStep ?? '';
@@ -2083,7 +1989,7 @@ class _FocusActionLane extends ConsumerWidget {
                   icon: Icon(hasStarterStep ? Icons.edit : Icons.add),
                   label: Text(hasStarterStep
                       ? 'Edit starter step'
-                      : 'Add starter step'),
+                      : 'Add starter step',),
                 ),
               ),
             ],
@@ -2259,78 +2165,5 @@ class _ActiveFocusTimerCardState
     final m = total ~/ 60;
     final s = total % 60;
     return '$m:${s.toString().padLeft(2, '0')}';
-  }
-}
-
-class _TrackerTallyTile extends StatelessWidget {
-  const _TrackerTallyTile({
-    required this.emoji,
-    required this.title,
-    required this.count,
-    required this.onIncrement,
-    required this.onDecrement,
-    this.subtitle,
-    this.progress,
-  });
-
-  final String emoji;
-  final String title;
-  final String? subtitle;
-  final int count;
-  final String? progress;
-  final VoidCallback onIncrement;
-  final VoidCallback onDecrement;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return InkWell(
-      onTap: onIncrement,
-      onLongPress: onDecrement,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(AppSpace.s12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
-          color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.18),
-        ),
-        child: Row(
-          children: [
-            Text(emoji, style: theme.textTheme.headlineSmall),
-            Gap.w12,
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  if ((subtitle ?? '').trim().isNotEmpty ||
-                      (progress ?? '').trim().isNotEmpty) ...[
-                    Gap.h4,
-                    Text(
-                      [
-                        if ((subtitle ?? '').trim().isNotEmpty) subtitle!,
-                        if ((progress ?? '').trim().isNotEmpty) progress!,
-                      ].join(' • '),
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            Gap.w12,
-            Text(
-              '$count',
-              style: theme.textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w900),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

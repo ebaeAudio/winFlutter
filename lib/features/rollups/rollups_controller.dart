@@ -90,7 +90,17 @@ final rollupsProvider =
 
   // If tasks repo is unavailable (e.g. signed out or Supabase not configured),
   // keep the screen functional but empty.
-  final allTasks = (allTasksRepo == null) ? const <AllTask>[] : await allTasksRepo.listAll();
+  final allTasks = <AllTask>[];
+  if (allTasksRepo != null) {
+    String? cursor;
+    for (var page = 0; page < 100; page++) {
+      final res = await allTasksRepo.listAll(limit: 250, cursor: cursor);
+      allTasks.addAll(res.items);
+      if (!res.hasMore || res.nextCursor == null) break;
+      cursor = res.nextCursor;
+      if (allTasks.length >= 10000) break; // safety cap
+    }
+  }
 
   final habits = await habitsRepo.listHabits();
   final habitIds = <String>{for (final h in habits) h.id};

@@ -25,7 +25,7 @@ class AdminFeedbackRepository {
   }) async {
     _requireUserId();
 
-    dynamic query = _client
+    var query = _client
         .from('user_feedback')
         .select('id,user_id,kind,description,details,entry_point,context,created_at');
 
@@ -33,14 +33,15 @@ class AdminFeedbackRepository {
       query = query.eq('kind', kindFilter.dbValue);
     }
 
-    query = query.order('created_at', ascending: false);
+    final orderedQuery = query.order('created_at', ascending: false);
 
+    final List<Map<String, dynamic>> rows;
     if (limit != null) {
-      query = query.limit(limit);
+      rows = await orderedQuery.limit(limit);
+    } else {
+      rows = await orderedQuery;
     }
-
-    final rows = await query;
-    final list = rows as List;
+    final list = rows;
 
     return [
       for (final row in list)

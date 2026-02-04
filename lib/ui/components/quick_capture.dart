@@ -156,7 +156,7 @@ class _QuickCaptureDialogState extends State<QuickCaptureDialog> {
       text: text,
       type: _inferredType,
       targetDate: _inferredDate,
-    ));
+    ),);
   }
 
   String get _typeLabel {

@@ -76,7 +76,7 @@ class PomodoroTimerState {
   Duration remainingAt(DateTime now) {
     if (status == PomodoroStatus.paused) {
       return Duration(
-          seconds: (pausedRemainingSeconds ?? 0).clamp(0, 24 * 60 * 60));
+          seconds: (pausedRemainingSeconds ?? 0).clamp(0, 24 * 60 * 60),);
     }
     if (status != PomodoroStatus.running) return Duration.zero;
     final end = endsAt;

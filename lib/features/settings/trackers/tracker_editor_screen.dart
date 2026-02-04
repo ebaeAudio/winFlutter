@@ -116,7 +116,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
     if (!_isNew && tracker == null && trackersAsync.isLoading) {
       return const AppScaffold(title: 'Tracker', children: [
         Center(child: CircularProgressIndicator()),
-      ]);
+      ],);
     }
 
     if (!_isNew && tracker == null) {
@@ -168,7 +168,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
           IconButton(
             tooltip: (tracker!.archived) ? 'Unarchive' : 'Archive',
             icon: Icon(
-                tracker.archived ? Icons.unarchive : Icons.archive_outlined),
+                tracker.archived ? Icons.unarchive : Icons.archive_outlined,),
             onPressed: () => _toggleArchive(context, tracker: tracker!),
           ),
       ],
@@ -252,7 +252,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
   }
 
   Future<void> _toggleArchive(BuildContext context,
-      {required Tracker tracker}) async {
+      {required Tracker tracker,}) async {
     final wantArchive = !tracker.archived;
     final ok = await showDialog<bool>(
           context: context,
@@ -302,7 +302,7 @@ class _TrackerEditorScreenState extends ConsumerState<TrackerEditorScreen> {
       if (emoji.isEmpty || desc.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Each item needs an emoji + description')),
+              content: Text('Each item needs an emoji + description'),),
         );
         return;
       }

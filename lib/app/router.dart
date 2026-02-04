@@ -85,7 +85,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (isSignedIn && (goingToAuth || goingToSetup)) {
         final safeNext = _safeRelativeLocationFromNextParam(
-            state.uri.queryParameters['next']);
+            state.uri.queryParameters['next'],);
         return safeNext ?? '/today';
       }
 

@@ -7,6 +7,7 @@ import 'package:win_flutter/app/theme.dart';
 import 'package:win_flutter/features/pitch/pitch_content.dart';
 import 'package:win_flutter/features/pitch/pitch_page.dart';
 import 'package:win_flutter/features/pitch/ui/hero.dart';
+import 'package:win_flutter/features/pitch/ui/faq.dart';
 
 void main() {
   Future<void> setDesktopSurface(WidgetTester tester) async {
@@ -79,32 +80,39 @@ void main() {
 
   testWidgets('FAQ accordion expands and collapses',
       (WidgetTester tester) async {
-    await setDesktopSurface(tester);
-    SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
+    // Test the accordion behavior directly to avoid scroll flakiness.
+    // Wrap FaqAccordion in SingleChildScrollView to provide unbounded height
+    // (ExpansionPanelList uses RenderListBody which requires unbounded main axis).
+    final first = pitchContent.faq.items.first;
+    final question = find.text(first.question);
+    // Use hitTestable() to check visibility - ExpansionPanelList uses AnimatedCrossFade
+    // which builds both states, so plain find.text() finds the widget even when collapsed.
+    final visibleAnswer = find.text(first.answer).hitTestable();
 
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
-        child: const MaterialApp(home: PitchPage()),
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: FaqAccordion(
+              content: pitchContent.faq,
+              analyticsEvent: 'test',
+            ),
+          ),
+        ),
       ),
     );
     await tester.pumpAndSettle();
 
-    final first = pitchContent.faq.items.first;
-    final question = find.widgetWithText(ListTile, first.question).at(0);
-    final answer = find.text(first.answer);
-
-    await tester.scrollUntilVisible(question, 200);
-    expect(answer, findsNothing);
+    expect(question, findsOneWidget);
+    expect(visibleAnswer, findsNothing);
 
     await tester.tap(question);
     await tester.pumpAndSettle();
-    expect(answer, findsOneWidget);
+    expect(visibleAnswer, findsOneWidget);
 
     await tester.tap(question);
     await tester.pumpAndSettle();
-    expect(answer, findsNothing);
+    expect(visibleAnswer, findsNothing);
   });
 }
 

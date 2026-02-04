@@ -22,8 +22,8 @@ class AdminUserRepository {
 
     try {
       // Use the admin_list_users() function which efficiently joins auth.users with admin_users
-      final rows = await _client.rpc('admin_list_users');
-      final list = rows as List;
+      final rows = await _client.rpc<List<dynamic>>('admin_list_users');
+      final list = rows;
 
       return [
         for (final row in list)

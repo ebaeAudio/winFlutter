@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -38,7 +40,6 @@ class _ZombieTaskReviewScreenState
 
     return AppScaffold(
       title: 'Clean Up Tasks',
-      children: const [],
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpace.s16),
         child: zombiesAsync.when(
@@ -109,6 +110,7 @@ class _ZombieTaskReviewScreenState
           },
         ),
       ),
+      children: const [],
     );
   }
 
@@ -132,7 +134,7 @@ class _ZombieTaskReviewScreenState
         resetCompleted: true,
       );
 
-      HapticFeedback.mediumImpact();
+      unawaited(HapticFeedback.mediumImpact());
 
       setState(() {
         _queue.remove(task);
@@ -167,7 +169,7 @@ class _ZombieTaskReviewScreenState
       final canUndo = await repo.supportsSoftDelete();
       await repo.delete(id: task.id);
 
-      HapticFeedback.mediumImpact();
+      unawaited(HapticFeedback.mediumImpact());
 
       setState(() {
         _queue.remove(task);
@@ -307,7 +309,7 @@ class _SwipeHints extends StatelessWidget {
           children: [
             Text('Move to Today', style: TextStyle(color: muted, fontSize: 13)),
             Gap.w4,
-            Icon(Icons.arrow_forward, size: 16, color: Colors.green),
+            const Icon(Icons.arrow_forward, size: 16, color: Colors.green),
           ],
         ),
       ],

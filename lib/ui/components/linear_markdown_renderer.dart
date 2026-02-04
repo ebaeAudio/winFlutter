@@ -614,7 +614,7 @@ class _MarkdownImage extends StatelessWidget {
   }
 
   void _showFullImage(BuildContext context, String imageUrl) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => _FullImageDialog(
         imageUrl: imageUrl,

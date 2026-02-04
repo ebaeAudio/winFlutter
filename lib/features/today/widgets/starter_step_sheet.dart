@@ -24,7 +24,7 @@ class StarterStepSheet extends ConsumerStatefulWidget {
 
 class _StarterStepSheetState extends ConsumerState<StarterStepSheet> {
   late final _controller =
-      TextEditingController(text: widget.initialText ?? widget.task.nextStep);
+      TextEditingController(text: widget.initialText ?? widget.task.starterStep);
   bool _saving = false;
   String? _error;
 

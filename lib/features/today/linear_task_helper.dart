@@ -78,7 +78,7 @@ Future<void> maybeSyncLinearTask({
       final match = localTasks.where((t) => t.id == taskId).toList();
       if (match.isEmpty) return;
       final t = match.first;
-      notesText = (t.notes ?? t.details ?? '').trim();
+      notesText = (t.details ?? '').trim();
     }
 
     final ref = LinearIssueRef.tryParseFromText(notesText);

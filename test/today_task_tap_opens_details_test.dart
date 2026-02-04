@@ -6,12 +6,38 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:win_flutter/app/app.dart';
 import 'package:win_flutter/app/env.dart';
 import 'package:win_flutter/app/theme.dart';
+import 'package:win_flutter/features/today/today_models.dart';
 
 void main() {
   testWidgets(
     'Tapping a task on Today opens Task Details (same as Tasks screen)',
     (WidgetTester tester) async {
-      SharedPreferences.setMockInitialValues({});
+      // Seed a local/demo-mode task so the test doesn't rely on Quick add UI.
+      final now = DateTime.now();
+      final ymd =
+          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      final day = TodayDayData(
+        ymd: ymd,
+        tasks: [
+          TodayTask(
+            id: 't1',
+            title: 'Tap to open details',
+            type: TodayTaskType.mustWin,
+            date: ymd,
+            completed: false,
+            inProgress: false,
+            createdAt: DateTime.fromMillisecondsSinceEpoch(1),
+          ),
+        ],
+        habits: const [],
+        reflection: '',
+        focusModeEnabled: false,
+        focusTaskId: null,
+        activeTimebox: null,
+      );
+      SharedPreferences.setMockInitialValues({
+        'today_day_$ymd': day.toJsonString(),
+      });
       final prefs = await SharedPreferences.getInstance();
 
       await tester.pumpWidget(
@@ -30,24 +56,14 @@ void main() {
 
       const title = 'Tap to open details';
 
-      // Add a Must‑Win via the Quick add section.
-      final scrollable = find.byType(Scrollable).first;
-      final quickAdd = find.bySemanticsLabel('What’s the task?');
-      await tester.scrollUntilVisible(quickAdd, 250, scrollable: scrollable);
-      await tester.tap(quickAdd);
-      await tester.enterText(quickAdd, title);
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
+      Finder scrollable() => find.byType(Scrollable).first;
 
-      // If the keyboard is still up / a field is still focused, the first tap can
-      // be consumed by the app's "tap-to-dismiss-keyboard" handler. Ensure we're
-      // in the normal browsing state before tapping a task row.
-      FocusManager.instance.primaryFocus?.unfocus();
-      await tester.pumpAndSettle();
+      // Scroll to the Must‑Wins section and then to the task row title.
+      final mustWinsHeader = find.text('Must‑Wins');
+      await tester.scrollUntilVisible(mustWinsHeader, 250, scrollable: scrollable());
 
-      // Tap the task row title on Today.
       final taskRow = find.text(title);
-      await tester.scrollUntilVisible(taskRow, 250, scrollable: scrollable);
+      await tester.scrollUntilVisible(taskRow, 250, scrollable: scrollable());
       final rowTile =
           find.ancestor(of: taskRow, matching: find.byType(ListTile)).first;
 

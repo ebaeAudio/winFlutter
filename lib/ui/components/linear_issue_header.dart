@@ -94,7 +94,7 @@ class LinearIssueHeader extends StatelessWidget {
   }
 
   Widget _buildMetadataRow(
-      BuildContext context, ThemeData theme, ColorScheme scheme) {
+      BuildContext context, ThemeData theme, ColorScheme scheme,) {
     return Wrap(
       spacing: AppSpace.s8,
       runSpacing: AppSpace.s8,
@@ -116,7 +116,7 @@ class LinearIssueHeader extends StatelessWidget {
   }
 
   Widget _buildDeepLink(
-      BuildContext context, ThemeData theme, ColorScheme scheme) {
+      BuildContext context, ThemeData theme, ColorScheme scheme,) {
     return InkWell(
       onTap: () => _openLinear(context),
       borderRadius: BorderRadius.circular(4),

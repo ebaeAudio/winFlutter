@@ -57,7 +57,7 @@ class LocalTrackerTalliesRepository implements TrackerTalliesRepository {
             ymd: ymd,
             count: entry.value < 0 ? 0 : entry.value,
           );
-        }()
+        }(),
     ].whereType<TrackerTally>().toList();
   }
 

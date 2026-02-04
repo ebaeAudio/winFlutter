@@ -18,7 +18,7 @@ void main() {
             emoji: '🥤',
             description: 'Cup',
             targetCadence: TargetCadence.daily,
-            targetValue: 8),
+            targetValue: 8,),
       ],
     );
 
@@ -37,7 +37,7 @@ void main() {
             emoji: '🥤',
             description: 'Cup',
             targetCadence: TargetCadence.daily,
-            targetValue: 10),
+            targetValue: 10,),
         TrackerItem(key: 'b', emoji: '🚰', description: 'Bottle'),
       ],
     );

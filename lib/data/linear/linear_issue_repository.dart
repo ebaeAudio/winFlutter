@@ -19,7 +19,7 @@ class LinearIssueRepository {
   /// Returns [LinearIssueMeta] with sync status indicating success/failure.
   /// On error, returns metadata with [LinearSyncState.failed] and error message.
   Future<LinearIssueMetaResult> getIssueMetaByIdentifier(
-      String identifier) async {
+      String identifier,) async {
     try {
       final issue = await _client.fetchIssueByIdentifier(identifier);
       if (issue == null) {

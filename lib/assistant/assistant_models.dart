@@ -49,7 +49,7 @@ sealed class AssistantCommand {
         final completed = map['completed'];
         if (name is! String || completed is! bool) return null;
         return HabitSetCompletedCommand(
-            name: name.trim(), completed: completed);
+            name: name.trim(), completed: completed,);
       case 'task.create':
         final title = map['title'];
         if (title is! String) return null;
@@ -60,7 +60,7 @@ sealed class AssistantCommand {
         final completed = map['completed'];
         if (title is! String || completed is! bool) return null;
         return TaskSetCompletedCommand(
-            title: title.trim(), completed: completed);
+            title: title.trim(), completed: completed,);
       case 'task.delete':
         final title = map['title'];
         if (title is! String) return null;

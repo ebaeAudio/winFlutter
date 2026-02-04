@@ -136,7 +136,7 @@ class PomodoroTimerController extends StateNotifier<PomodoroTimerState> {
     if (state.status == PomodoroStatus.paused) {
       final rem = (state.pausedRemainingSeconds ?? 0) + (m * 60);
       await _save(
-          state.copyWith(pausedRemainingSeconds: rem.clamp(0, 24 * 60 * 60)));
+          state.copyWith(pausedRemainingSeconds: rem.clamp(0, 24 * 60 * 60)),);
       return;
     }
 

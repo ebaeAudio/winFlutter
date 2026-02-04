@@ -23,8 +23,8 @@ void main() {
     expect(t.estimatedMinutes, 25);
   });
 
-  test('TodayTask JSON back-compat: legacy nextStep/estimateMinutes populate Focus v2 fields', () {
-    final parsed = TodayTask.fromJson({
+  test('local Task JSON back-compat: legacy nextStep/estimateMinutes populate canonical Focus v2 fields', () {
+    final parsed = Task.fromLocalJson({
       'id': 't1',
       'title': 'Do the thing',
       'type': 'must-win',
@@ -32,13 +32,10 @@ void main() {
       'createdAtMs': 123,
       'nextStep': 'Open the doc',
       'estimateMinutes': 15,
-    });
+    }, fallbackDate: '2026-01-12',);
 
     expect(parsed.starterStep, 'Open the doc');
     expect(parsed.estimatedMinutes, 15);
-    // Legacy aliases remain in sync for existing screens.
-    expect(parsed.nextStep, 'Open the doc');
-    expect(parsed.estimateMinutes, 15);
   });
 
   test('ActiveTimebox JSON round-trip', () {

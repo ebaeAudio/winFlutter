@@ -10,6 +10,7 @@ import 'package:win_flutter/features/focus/focus_policy_controller.dart';
 import 'package:win_flutter/features/focus/focus_providers.dart';
 import 'package:win_flutter/features/focus/focus_session_controller.dart';
 import 'package:win_flutter/platform/restriction_engine/restriction_engine.dart';
+import 'package:win_flutter/platform/notifications/notification_service.dart';
 
 void main() {
   test('startSession persists active and endSession moves it to history',
@@ -17,12 +18,13 @@ void main() {
     final policies = _MemPolicyRepo();
     final sessions = _MemSessionRepo();
     final engine = _FakeEngine();
+    final notifications = _FakeNotificationService();
 
     final policy = FocusPolicy(
       id: 'p1',
       name: 'Policy',
       allowedApps: const [
-        AppIdentifier(platform: AppPlatform.android, id: 'a')
+        AppIdentifier(platform: AppPlatform.android, id: 'a'),
       ],
       friction: FocusFrictionSettings.defaults,
       createdAt: DateTime.now(),
@@ -35,6 +37,7 @@ void main() {
         focusPolicyRepositoryProvider.overrideWithValue(policies),
         focusSessionRepositoryProvider.overrideWithValue(sessions),
         restrictionEngineProvider.overrideWithValue(engine),
+        notificationServiceProvider.overrideWithValue(notifications),
       ],
     );
     addTearDown(container.dispose);
@@ -66,12 +69,13 @@ void main() {
     final policies = _MemPolicyRepo();
     final sessions = _MemSessionRepo();
     final engine = _FakeEngine();
+    final notifications = _FakeNotificationService();
 
     final policy = FocusPolicy(
       id: 'p1',
       name: 'Policy',
       allowedApps: const [
-        AppIdentifier(platform: AppPlatform.android, id: 'a')
+        AppIdentifier(platform: AppPlatform.android, id: 'a'),
       ],
       friction: FocusFrictionSettings.defaults,
       createdAt: DateTime.now(),
@@ -84,6 +88,7 @@ void main() {
         focusPolicyRepositoryProvider.overrideWithValue(policies),
         focusSessionRepositoryProvider.overrideWithValue(sessions),
         restrictionEngineProvider.overrideWithValue(engine),
+        notificationServiceProvider.overrideWithValue(notifications),
       ],
     );
     addTearDown(container.dispose);
@@ -197,4 +202,24 @@ class _FakeEngine implements RestrictionEngine {
   }) async {
     started = true;
   }
+}
+
+class _FakeNotificationService extends NotificationService {
+  @override
+  Future<void> cancel(int notificationId) async {}
+
+  @override
+  Future<void> init({required void Function(String route) onDeepLink}) async {}
+
+  @override
+  Future<void> scheduleFocusSessionComplete({
+    required int notificationId,
+    required DateTime endsAt,
+    required String title,
+    required String body,
+    required String route,
+  }) async {}
+
+  @override
+  Future<void> scheduleMorningPrompt() async {}
 }

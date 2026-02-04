@@ -24,7 +24,7 @@ void main() {
     expect(decoded.first.id, 'p1');
     expect(decoded.first.allowedApps.single.id, 'com.example.app');
     expect(decoded.first.friction.holdToUnlockSeconds,
-        FocusFrictionSettings.defaults.holdToUnlockSeconds);
+        FocusFrictionSettings.defaults.holdToUnlockSeconds,);
   });
 
   test('FocusSession JSON round-trip', () {

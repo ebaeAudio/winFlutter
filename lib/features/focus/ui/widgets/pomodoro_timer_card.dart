@@ -68,7 +68,7 @@ class _PomodoroTimerCardState extends ConsumerState<PomodoroTimerCard> {
             Row(
               children: [
                 Icon(isFocus ? Icons.timer : Icons.coffee,
-                    color: scheme.onSurfaceVariant),
+                    color: scheme.onSurfaceVariant,),
                 Gap.w12,
                 Expanded(
                   child: Text(

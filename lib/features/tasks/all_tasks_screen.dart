@@ -11,6 +11,7 @@ import '../../data/tasks/zombie_tasks_provider.dart';
 import '../../data/tasks/task.dart';
 import '../../data/tasks/task_realtime_provider.dart';
 import '../../app/theme.dart';
+import '../../app/user_settings.dart';
 import 'all_tasks_query.dart';
 import '../../ui/app_scaffold.dart';
 import '../../ui/components/empty_state_card.dart';
@@ -20,15 +21,7 @@ import '../../ui/components/task_list.dart';
 import '../../ui/spacing.dart';
 
 final _allTasksRefreshProvider = StateProvider<int>((_) => 0);
-
-final allTasksListProvider = FutureProvider<List<AllTask>>((ref) async {
-  // Change this value to force a refresh after mutations.
-  ref.watch(_allTasksRefreshProvider);
-
-  final repo = ref.watch(allTasksRepositoryProvider);
-  if (repo == null) return const [];
-  return repo.listAll();
-});
+const int _pageSize = 50;
 
 class AllTasksScreen extends ConsumerStatefulWidget {
   const AllTasksScreen({super.key});
@@ -39,6 +32,7 @@ class AllTasksScreen extends ConsumerStatefulWidget {
 
 class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
 
   var _status = AllTasksStatusFilter.open;
   final _types = <TaskType>{TaskType.mustWin, TaskType.niceToDo};
@@ -52,12 +46,24 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
   bool _showCompleted = false;
   final _sendingToCompleted = <String>{};
 
+  int _seenRefreshToken = -1;
+
+  // Pagination state
+  bool _loadingInitial = false;
+  bool _refreshing = false;
+  bool _loadingMore = false;
+  String? _loadError;
+  List<AllTask> _loaded = const [];
+  String? _nextCursor;
+  bool _hasMore = true;
+
   static const _sendOffDuration = Duration(milliseconds: 260);
 
   @override
   void initState() {
     super.initState();
     _loadViewPrefs();
+    _scrollController.addListener(_onScroll);
   }
 
   void _loadViewPrefs() {
@@ -93,6 +99,7 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -100,6 +107,96 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
 
   void _refresh() {
     ref.read(_allTasksRefreshProvider.notifier).state++;
+  }
+
+  void _onScroll() {
+    if (_loadingInitial || _refreshing || _loadingMore) return;
+    if (!_hasMore) return;
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (!pos.hasPixels) return;
+    if (pos.extentAfter > 300) return;
+
+    final repo = ref.read(allTasksRepositoryProvider);
+    if (repo == null) return;
+    unawaited(_loadMore(repo));
+  }
+
+  Future<void> _resetAndLoadFirstPage(AllTasksRepository? repo) async {
+    final keepExisting = _loaded.isNotEmpty;
+    setState(() {
+      _loadError = null;
+      _loadingInitial = repo != null && !keepExisting;
+      _refreshing = repo != null && keepExisting;
+      _loadingMore = false;
+      _hasMore = true;
+      _nextCursor = null;
+      _showCompleted = false;
+      _sendingToCompleted.clear();
+      if (!keepExisting) _loaded = const [];
+    });
+
+    if (repo == null) {
+      setState(() {
+        _loadingInitial = false;
+        _refreshing = false;
+        _loaded = const [];
+        _hasMore = false;
+        _nextCursor = null;
+      });
+      return;
+    }
+
+    try {
+      final res = await repo.listAll(limit: _pageSize, cursor: null);
+      if (!mounted) return;
+      setState(() {
+        _loaded = res.items;
+        _nextCursor = res.nextCursor;
+        _hasMore = res.hasMore;
+        _loadingInitial = false;
+        _refreshing = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = 'Could not load tasks.';
+        _loadingInitial = false;
+        _refreshing = false;
+      });
+    }
+  }
+
+  Future<void> _loadMore(AllTasksRepository repo) async {
+    if (_loadingMore || _loadingInitial || _refreshing) return;
+    if (!_hasMore) return;
+    final cursor = _nextCursor;
+    if (cursor == null || cursor.trim().isEmpty) return;
+
+    setState(() => _loadingMore = true);
+    try {
+      final res = await repo.listAll(limit: _pageSize, cursor: cursor);
+      if (!mounted) return;
+
+      final existingIds = <String>{for (final t in _loaded) t.id};
+      final appended = [
+        for (final t in res.items)
+          if (!existingIds.contains(t.id)) t,
+      ];
+
+      setState(() {
+        _loaded = [..._loaded, ...appended];
+        _nextCursor = res.nextCursor;
+        _hasMore = res.hasMore;
+        _loadingMore = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingMore = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not load more tasks.')),
+      );
+    }
   }
 
   Future<void> _moveToToday(AllTasksRepository repo, AllTask t) async {
@@ -118,7 +215,7 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
   }
 
   Future<void> _moveSelectedToToday(
-      AllTasksRepository repo, List<AllTask> all) async {
+      AllTasksRepository repo, List<AllTask> all,) async {
     final today = _todayYmd();
     final selectedTasks = all.where((t) => _selected.contains(t.id)).toList();
     if (selectedTasks.isEmpty) return;
@@ -144,14 +241,14 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
   }
 
   Future<void> _setCompleted(
-      AllTasksRepository repo, AllTask t, bool completed) async {
+      AllTasksRepository repo, AllTask t, bool completed,) async {
     await repo.setCompleted(ymd: t.ymd, taskId: t.id, completed: completed);
     if (!mounted) return;
     _refresh();
   }
 
   Future<void> _setInProgress(
-      AllTasksRepository repo, AllTask t, bool inProgress) async {
+      AllTasksRepository repo, AllTask t, bool inProgress,) async {
     try {
       await repo.setInProgress(
         ymd: t.ymd,
@@ -174,7 +271,7 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
   }
 
   Future<void> _setCompletedWithSendOff(
-      AllTasksRepository repo, AllTask t, bool completed) async {
+      AllTasksRepository repo, AllTask t, bool completed,) async {
     // Only animate "send off" when completing an open task (Active list UX).
     if (!completed || t.completed) return _setCompleted(repo, t, completed);
     if (_sendingToCompleted.contains(t.id)) return;
@@ -240,6 +337,8 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
     required List<AllTask> all,
     required AllTasksQuery query,
     required String todayYmd,
+    required bool loadingMore,
+    required bool hasMore,
   }) {
     final filtered = applyAllTasksQuery(
       all: all,
@@ -432,6 +531,18 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
                   context.push('/today/task/${t.id}?ymd=${t.ymd}'),
             ),
         ],
+        if (loadingMore) ...[
+          Gap.h16,
+          const Center(child: CircularProgressIndicator()),
+        ] else if (hasMore) ...[
+          Gap.h16,
+          Center(
+            child: Text(
+              'Scroll to load more',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -452,11 +563,20 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
     );
 
     final repo = ref.watch(allTasksRepositoryProvider);
-    final asyncTasks = repo == null ? null : ref.watch(allTasksListProvider);
-    // Avoid flashing a full-screen loading state during refreshes (e.g. after
-    // toggling completion). If we already have data, keep showing it while the
-    // provider fetches updated results in the background.
-    final cachedTasks = asyncTasks?.valueOrNull;
+    final refreshToken = ref.watch(_allTasksRefreshProvider);
+    if (_seenRefreshToken != refreshToken) {
+      _seenRefreshToken = refreshToken;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _resetAndLoadFirstPage(ref.read(allTasksRepositoryProvider));
+      });
+    }
+
+    final settings = ref.watch(userSettingsControllerProvider);
+    final baseHorizontalPadding = settings.disableHorizontalScreenPadding
+        ? AppSpace.s8
+        : AppSpace.s16;
+
     final today = _todayYmd();
     final query = AllTasksQuery(
       status: _status,
@@ -466,6 +586,62 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
       sortField: _sortField,
       sortDescending: _sortDescending,
     );
+
+    final Widget mainContent;
+    if (repo == null) {
+      mainContent = EmptyStateCard(
+        icon: Icons.cloud_off,
+        title: 'Tasks are unavailable',
+        description: 'Connect Supabase or enable Demo Mode to view tasks here.',
+        ctaLabel: 'Go to Settings',
+        onCtaPressed: () => context.go('/settings'),
+      );
+    } else if (_loaded.isEmpty && (_loadingInitial || _refreshing)) {
+      mainContent = const Card(
+        child: Padding(
+          padding: EdgeInsets.all(AppSpace.s16),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    } else if (_loaded.isEmpty && _loadError != null) {
+      mainContent = Card(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpace.s16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _loadError!,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              Gap.h12,
+              FilledButton.icon(
+                onPressed: _refresh,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (_loaded.isEmpty) {
+      // First-frame placeholder while the initial load kicks off.
+      mainContent = const Card(
+        child: Padding(
+          padding: EdgeInsets.all(AppSpace.s16),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    } else {
+      mainContent = _buildTasksBody(
+        repo: repo,
+        all: _loaded,
+        query: query,
+        todayYmd: today,
+        loadingMore: _loadingMore,
+        hasMore: _hasMore,
+      );
+    }
 
     return AppScaffold(
       title: _selectMode ? 'Select tasks (${_selected.length})' : 'Tasks',
@@ -501,8 +677,7 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
                         onPressed: _selected.isEmpty
                             ? null
                             : () async {
-                                final all = asyncTasks?.valueOrNull ?? const [];
-                                await _moveSelectedToToday(repo, all);
+                                await _moveSelectedToToday(repo, _loaded);
                               },
                         icon: const Icon(Icons.today),
                         label: Text('Move to Today (${_selected.length})'),
@@ -513,120 +688,75 @@ class _AllTasksScreenState extends ConsumerState<AllTasksScreen> {
               ),
             )
           : null,
-      children: [
-        _FiltersCard(
-          searchController: _searchController,
-          status: _status,
-          types: _types,
-          dateScope: _dateScope,
-          sortField: _sortField,
-          sortDescending: _sortDescending,
-          groupByBuckets: _groupByBuckets,
-          selectMode: _selectMode,
-          onStatusChanged: (next) => setState(() {
-            _status = next;
-            if (_status == AllTasksStatusFilter.done) _showCompleted = true;
-            unawaited(_saveViewPrefs());
-          }),
-          onTypeToggled: (type, enabled) => setState(() {
-            enabled ? _types.add(type) : _types.remove(type);
-            unawaited(_saveViewPrefs());
-          }),
-          onDateScopeChanged: (next) => setState(() {
-            _dateScope = next;
-            unawaited(_saveViewPrefs());
-          }),
-          onSortFieldChanged: (next) => setState(() {
-            _sortField = next;
-            unawaited(_saveViewPrefs());
-          }),
-          onToggleSortDirection: () => setState(() {
-            _sortDescending = !_sortDescending;
-            unawaited(_saveViewPrefs());
-          }),
-          onGroupByBucketsChanged: (enabled) => setState(() {
-            _groupByBuckets = enabled;
-            unawaited(_saveViewPrefs());
-          }),
-          onSearchChanged: () => setState(() {}),
+      body: ListView(
+        controller: _scrollController,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: EdgeInsets.symmetric(
+          horizontal: baseHorizontalPadding,
+          vertical: AppSpace.s16,
         ),
-        Gap.h16,
-        Builder(
-          builder: (context) {
-            final zombiesAsync = ref.watch(zombieTasksProvider);
-            final zombies = zombiesAsync.valueOrNull;
-            if (zombies == null || zombies.isEmpty) {
-              return const SizedBox.shrink();
-            }
-            return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpace.s16),
-              child: ZombieTaskAlertCard(
-                zombies: zombies,
-                onOpen: () => context.go('/tasks/cleanup'),
-              ),
-            );
-          },
-        ),
-        if (repo == null)
-          EmptyStateCard(
-            icon: Icons.cloud_off,
-            title: 'Tasks are unavailable',
-            description:
-                'Connect Supabase or enable Demo Mode to view tasks here.',
-            ctaLabel: 'Go to Settings',
-            onCtaPressed: () => context.go('/settings'),
-          )
-        else
-          asyncTasks!.when(
-            data: (all) {
-              return _buildTasksBody(
-                repo: repo,
-                all: all,
-                query: query,
-                todayYmd: today,
-              );
-            },
-            loading: () {
-              // Keep showing previously loaded results while refreshing.
-              final all = cachedTasks;
-              if (all != null) {
-                return _buildTasksBody(
-                  repo: repo,
-                  all: all,
-                  query: query,
-                  todayYmd: today,
-                );
-              }
-
-              return const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(AppSpace.s16),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-              );
-            },
-            error: (_, __) => Card(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpace.s16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Could not load tasks.',
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                    Gap.h12,
-                    FilledButton.icon(
-                      onPressed: _refresh,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+        children: [
+          _FiltersCard(
+            searchController: _searchController,
+            status: _status,
+            types: _types,
+            dateScope: _dateScope,
+            sortField: _sortField,
+            sortDescending: _sortDescending,
+            groupByBuckets: _groupByBuckets,
+            selectMode: _selectMode,
+            onStatusChanged: (next) => setState(() {
+              _status = next;
+              if (_status == AllTasksStatusFilter.done) _showCompleted = true;
+              unawaited(_saveViewPrefs());
+            }),
+            onTypeToggled: (type, enabled) => setState(() {
+              enabled ? _types.add(type) : _types.remove(type);
+              unawaited(_saveViewPrefs());
+            }),
+            onDateScopeChanged: (next) => setState(() {
+              _dateScope = next;
+              unawaited(_saveViewPrefs());
+            }),
+            onSortFieldChanged: (next) => setState(() {
+              _sortField = next;
+              unawaited(_saveViewPrefs());
+            }),
+            onToggleSortDirection: () => setState(() {
+              _sortDescending = !_sortDescending;
+              unawaited(_saveViewPrefs());
+            }),
+            onGroupByBucketsChanged: (enabled) => setState(() {
+              _groupByBuckets = enabled;
+              unawaited(_saveViewPrefs());
+            }),
+            onSearchChanged: () => setState(() {}),
           ),
-      ],
+          Gap.h16,
+          Builder(
+            builder: (context) {
+              final zombiesAsync = ref.watch(zombieTasksProvider);
+              final zombies = zombiesAsync.valueOrNull;
+              if (zombies == null || zombies.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: const EdgeInsets.only(bottom: AppSpace.s16),
+                child: ZombieTaskAlertCard(
+                  zombies: zombies,
+                  onOpen: () => context.go('/tasks/cleanup'),
+                ),
+              );
+            },
+          ),
+          if (_refreshing) ...[
+            const LinearProgressIndicator(minHeight: 2),
+            Gap.h12,
+          ],
+          mainContent,
+        ],
+      ),
+      children: const [],
     );
   }
 }
@@ -729,12 +859,12 @@ class _FiltersCard extends StatelessWidget {
                   segments: const [
                     ButtonSegment(
                         value: AllTasksStatusFilter.open,
-                        label: Text('Active')),
+                        label: Text('Active'),),
                     ButtonSegment(
                         value: AllTasksStatusFilter.done,
-                        label: Text('Completed')),
+                        label: Text('Completed'),),
                     ButtonSegment(
-                        value: AllTasksStatusFilter.all, label: Text('All')),
+                        value: AllTasksStatusFilter.all, label: Text('All'),),
                   ],
                   selected: {status},
                   onSelectionChanged: (s) => onStatusChanged(s.first),
@@ -744,12 +874,12 @@ class _FiltersCard extends StatelessWidget {
                     ButtonSegment(value: AllTasksDateScope.any, label: Text('Any')),
                     ButtonSegment(
                         value: AllTasksDateScope.overdue,
-                        label: Text('Overdue')),
+                        label: Text('Overdue'),),
                     ButtonSegment(
-                        value: AllTasksDateScope.today, label: Text('Today')),
+                        value: AllTasksDateScope.today, label: Text('Today'),),
                     ButtonSegment(
                         value: AllTasksDateScope.upcoming,
-                        label: Text('Upcoming')),
+                        label: Text('Upcoming'),),
                   ],
                   selected: {dateScope},
                   onSelectionChanged: (s) => onDateScopeChanged(s.first),
@@ -1013,7 +1143,7 @@ class _TasksListCard extends StatelessWidget {
                           },
                           itemBuilder: (context) => [
                             const PopupMenuItem(
-                                value: 'details', child: Text('Details')),
+                                value: 'details', child: Text('Details'),),
                             PopupMenuItem(
                               value: 'progress',
                               child: Text(

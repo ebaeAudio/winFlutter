@@ -626,7 +626,8 @@ class _UserListItemState extends ConsumerState<_UserListItem> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      showErrorDialog(
+      // ignore: unawaited_futures
+      await showErrorDialog(
         context,
         title: 'Failed to grant admin access',
         error: e,
@@ -678,7 +679,8 @@ class _UserListItemState extends ConsumerState<_UserListItem> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      showErrorDialog(
+      // ignore: unawaited_futures
+      await showErrorDialog(
         context,
         title: 'Failed to revoke admin access',
         error: e,

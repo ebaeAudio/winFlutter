@@ -80,8 +80,8 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
     if (focusTask != null) {
       final detailsRepo = ref.watch(taskDetailsRepositoryProvider);
       if (detailsRepo == null) {
-        nextStep = focusTask.nextStep;
-        notesText = (focusTask.notes ?? focusTask.details ?? '').trim();
+        nextStep = focusTask.starterStep;
+        notesText = (focusTask.details ?? '').trim();
       } else {
         final detailsAsync = ref.watch(taskDetailsProvider(focusTask.id));
         final details = detailsAsync.valueOrNull;
@@ -162,7 +162,7 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                             color: theme.colorScheme.surfaceContainerHighest
                                 .withOpacity(0.20),
                             border: Border.all(
-                                color: theme.dividerColor.withOpacity(0.4)),
+                                color: theme.dividerColor.withOpacity(0.4),),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,7 +211,7 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                             color: theme.colorScheme.errorContainer
                                 .withOpacity(0.20),
                             border: Border.all(
-                                color: theme.dividerColor.withOpacity(0.4)),
+                                color: theme.dividerColor.withOpacity(0.4),),
                           ),
                           child: Text(
                             'Could not load Linear issue.',
@@ -228,7 +228,7 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                             compact: true,
                             onRefresh: () => ref.invalidate(
                               linearIssueByIdentifierProvider(
-                                  linearRef!.identifier),
+                                  linearRef!.identifier,),
                             ),
                           );
                         },
@@ -241,7 +241,7 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                   taskId: focusTask.id,
                   nextStep: nextStep,
                   onAddStarterStep: () => _openStarterStep(context,
-                      ymd: widget.ymd, task: focusTask),
+                      ymd: widget.ymd, task: focusTask,),
                 ),
                 Gap.h12,
                 if (isBreak)
@@ -257,11 +257,11 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                     ),
                     onEndEarly: () => ref
                         .read(
-                            todayTimeboxControllerProvider(widget.ymd).notifier)
+                            todayTimeboxControllerProvider(widget.ymd).notifier,)
                         .endEarly(),
                     onAddFive: () => ref
                         .read(
-                            todayTimeboxControllerProvider(widget.ymd).notifier)
+                            todayTimeboxControllerProvider(widget.ymd).notifier,)
                         .addMinutes(5),
                     didScheduleExpiredReconcile: _didScheduleExpiredReconcile,
                     didScheduleExpiredReconcileForStartedAtMs:
@@ -288,11 +288,11 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                     ),
                     onEndEarly: () => ref
                         .read(
-                            todayTimeboxControllerProvider(widget.ymd).notifier)
+                            todayTimeboxControllerProvider(widget.ymd).notifier,)
                         .endEarly(),
                     onAddFive: () => ref
                         .read(
-                            todayTimeboxControllerProvider(widget.ymd).notifier)
+                            todayTimeboxControllerProvider(widget.ymd).notifier,)
                         .addMinutes(5),
                     didScheduleExpiredReconcile: _didScheduleExpiredReconcile,
                     didScheduleExpiredReconcileForStartedAtMs:
@@ -329,7 +329,7 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                           SnackBar(
                             content: Text(success
                                 ? 'Marked done'
-                                : 'Could not update task. Try again.'),
+                                : 'Could not update task. Try again.',),
                           ),
                         );
                       },
@@ -361,7 +361,7 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
                         if (isRunning) {
                           await ref
                               .read(todayTimeboxControllerProvider(widget.ymd)
-                                  .notifier)
+                                  .notifier,)
                               .endEarly();
                         }
                         await controller.setFocusTaskId(null);
@@ -513,7 +513,7 @@ class _FocusActionLaneState extends ConsumerState<FocusActionLane> {
       taskId: task.id,
       taskTitle: task.title,
       mustWins: widget.mustWins,
-      taskNotes: task.notes,
+      taskNotes: task.details,
     );
   }
 }

@@ -45,7 +45,7 @@ class _DesktopNavShellState extends ConsumerState<DesktopNavShell> {
     }
   }
 
-  void _openQuickCapture() async {
+  Future<void> _openQuickCapture() async {
     if (_isQuickCaptureOpen) return;
     setState(() => _isQuickCaptureOpen = true);
     final result = await showQuickCapture(context);
@@ -53,7 +53,7 @@ class _DesktopNavShellState extends ConsumerState<DesktopNavShell> {
       setState(() => _isQuickCaptureOpen = false);
     }
     if (result != null && mounted) {
-      _handleQuickCaptureResult(result);
+      await _handleQuickCaptureResult(result);
     }
   }
 

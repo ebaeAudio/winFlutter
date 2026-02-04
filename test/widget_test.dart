@@ -33,6 +33,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // App defaults to the Today screen (demo mode avoids auth/setup redirects).
-    expect(find.text('Today'), findsWidgets);
+    // Today screen reliably includes the Quick add input.
+    expect(find.bySemanticsLabel('What’s the task?'), findsWidgets);
   });
 }

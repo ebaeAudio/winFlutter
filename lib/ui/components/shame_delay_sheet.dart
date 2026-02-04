@@ -12,14 +12,14 @@ class ShameDelaySheet extends StatefulWidget {
     this.messages,
   });
 
-  static Future<void> show(
+  static Future<bool> show(
     BuildContext context, {
     required int delaySeconds,
     List<String>? messages,
   }) async {
-    if (delaySeconds <= 0) return;
+    if (delaySeconds <= 0) return true;
 
-    await showModalBottomSheet<void>(
+    final result = await showModalBottomSheet<bool>(
       context: context,
       showDragHandle: true,
       enableDrag: true,
@@ -30,6 +30,9 @@ class ShameDelaySheet extends StatefulWidget {
         messages: messages,
       ),
     );
+
+    // Only return true if the timer completed naturally.
+    return result == true;
   }
 
   final int delaySeconds;
@@ -100,7 +103,7 @@ class _ShameDelaySheetState extends State<ShameDelaySheet> {
     if (remaining.inMilliseconds <= 0) {
       _countdownTimer?.cancel();
       _messageTimer?.cancel();
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop(true);
     }
   }
 

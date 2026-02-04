@@ -36,11 +36,11 @@ final isAdminProvider = FutureProvider<bool?>((ref) async {
   try {
     // Use the is_admin() function which bypasses RLS (security definer).
     // This function can check admin status even when RLS blocks direct table access.
-    final result = await client.rpc('is_admin', params: {
+    final result = await client.rpc<bool>('is_admin', params: {
       'user_id_param': session.user.id,
-    });
+    },);
 
-    return result as bool? ?? false;
+    return result;
   } catch (e) {
     // If the function doesn't exist, that's a configuration issue - rethrow with context.
     if (e.toString().contains('function') && 

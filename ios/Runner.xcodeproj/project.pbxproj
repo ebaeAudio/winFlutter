@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 70;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -20,7 +20,6 @@
 		B7F1E3C2D4B5968778695A4B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7F1E3C2D4B5968778695A4B /* SceneDelegate.swift */; };
 		C72E016F2F21B32500721EB3 /* ManagedSettings.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C72E01512F20417C00721EB3 /* ManagedSettings.framework */; };
 		C72E01702F21B32500721EB3 /* ManagedSettingsUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C72E01532F20417D00721EB3 /* ManagedSettingsUI.framework */; };
-		C72E01782F21B32500721EB3 /* WinTheYearShieldConfig.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C72E016E2F21B32500721EB3 /* WinTheYearShieldConfig.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		E5F60718293A4B5C6D7E8F91 /* PushNotificationsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5F60718293A4B5C6D7E8F90 /* PushNotificationsPlugin.swift */; };
 /* End PBXBuildFile section */
 
@@ -31,13 +30,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
-		};
-		C72E01762F21B32500721EB3 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = C72E016D2F21B32500721EB3;
-			remoteInfo = WinTheYearShieldConfig;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -58,7 +50,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				C72E01782F21B32500721EB3 /* WinTheYearShieldConfig.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -104,21 +95,21 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		C72E01832F21B41200721EB3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		C72E01832F21B41200721EB3 /* Exceptions for "WinTheYearShieldConfig" folder in "Runner" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				ShieldTaskData.swift,
 			);
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 		};
-		C72E01882F21B42C00721EB3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		C72E01882F21B42C00721EB3 /* Exceptions for "WinTheYearShieldConfig" folder in "RunnerTests" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				ShieldTaskData.swift,
 			);
 			target = 331C8080294A63A400263BE5 /* RunnerTests */;
 		};
-		C72E01AC2F21B63E00721EB3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		C72E01AC2F21B63E00721EB3 /* Exceptions for "WinTheYearShieldConfig" folder in "WinTheYearShieldConfig" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -128,7 +119,20 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		C72E01712F21B32500721EB3 /* WinTheYearShieldConfig */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (C72E01832F21B41200721EB3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, C72E01882F21B42C00721EB3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, C72E01AC2F21B63E00721EB3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = WinTheYearShieldConfig; sourceTree = "<group>"; };
+		C72E01712F21B32500721EB3 /* WinTheYearShieldConfig */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C72E01832F21B41200721EB3 /* Exceptions for "WinTheYearShieldConfig" folder in "Runner" target */,
+				C72E01882F21B42C00721EB3 /* Exceptions for "WinTheYearShieldConfig" folder in "RunnerTests" target */,
+				C72E01AC2F21B63E00721EB3 /* Exceptions for "WinTheYearShieldConfig" folder in "WinTheYearShieldConfig" target */,
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = WinTheYearShieldConfig;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -297,7 +301,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				C72E01772F21B32500721EB3 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
@@ -443,13 +446,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-Runner/Pods-Runner-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -530,11 +529,6 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
-		};
-		C72E01772F21B32500721EB3 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = C72E016D2F21B32500721EB3 /* WinTheYearShieldConfig */;
-			targetProxy = C72E01762F21B32500721EB3 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 

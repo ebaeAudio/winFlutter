@@ -99,7 +99,7 @@ class _StarterStepEditorSheetState extends ConsumerState<StarterStepEditorSheet>
       final today = ref.watch(todayControllerProvider(widget.ymd));
       final match =
           today.tasks.where((t) => t.id == widget.taskId).toList(growable: false);
-      initial = match.isEmpty ? '' : (match.first.nextStep ?? '');
+      initial = match.isEmpty ? '' : (match.first.starterStep ?? '');
     } else {
       final detailsAsync = ref.watch(taskDetailsProvider(widget.taskId));
       if (detailsAsync.hasError) {

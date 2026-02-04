@@ -35,7 +35,7 @@ class LocalFocusPolicyRepository implements FocusPolicyRepository {
         if (p.id != policy.id) p,
       policy.copyWith(updatedAt: now),
     ]..sort((a, b) => (b.updatedAt ?? b.createdAt ?? now)
-        .compareTo(a.updatedAt ?? a.createdAt ?? now));
+        .compareTo(a.updatedAt ?? a.createdAt ?? now),);
 
     await _prefs.setString(_policiesKey, FocusPolicy.listToJsonString(updated));
   }

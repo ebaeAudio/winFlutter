@@ -12,6 +12,7 @@ final allTasksRepositoryProvider = Provider<AllTasksRepository?>((ref) {
   final env = ref.watch(envProvider);
   final prefs = ref.watch(sharedPreferencesProvider);
   final tasksRepo = ref.watch(tasksRepositoryProvider);
+  final schema = ref.watch(tasksSchemaProvider);
   final supabase = ref.watch(supabaseProvider);
 
   if (env.demoMode) {
@@ -19,8 +20,10 @@ final allTasksRepositoryProvider = Provider<AllTasksRepository?>((ref) {
   }
 
   if (tasksRepo == null) return null;
+  if (schema == null) return null;
   return SupabaseAllTasksRepository(
     client: supabase.client!,
     tasksRepository: tasksRepo,
+    schema: schema,
   );
 });

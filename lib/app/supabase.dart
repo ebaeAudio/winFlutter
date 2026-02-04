@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -36,7 +37,16 @@ class SupabaseController extends StateNotifier<SupabaseState> {
     if (state.isInitialized) return;
 
     await Supabase.initialize(
-        url: env.supabaseUrl, anonKey: env.supabaseAnonKey);
+      url: env.supabaseUrl,
+      anonKey: env.supabaseAnonKey,
+      // On mobile, configure the SDK to listen for auth deep links
+      // (magic link sign-in, password reset). The SDK uses app_links internally.
+      authOptions: kIsWeb
+          ? const FlutterAuthClientOptions()
+          : const FlutterAuthClientOptions(
+              authFlowType: AuthFlowType.pkce,
+            ),
+    );
     state = const SupabaseState(isInitialized: true, isConfigured: true);
   }
 }

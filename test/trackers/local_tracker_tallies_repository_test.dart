@@ -15,17 +15,17 @@ void main() {
 
     expect(
       await repo.applyDelta(
-          ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: 1),
+          ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: 1,),
       1,
     );
     expect(
       await repo.applyDelta(
-          ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: 1),
+          ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: 1,),
       2,
     );
     expect(
       await repo.applyDelta(
-          ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: -5),
+          ymd: ymd, trackerId: trackerId, itemKey: itemKey, delta: -5,),
       0,
     );
   });
@@ -37,11 +37,11 @@ void main() {
     final repo = LocalTrackerTalliesRepository(prefs);
 
     await repo.applyDelta(
-        ymd: '2026-01-01', trackerId: 't1', itemKey: 'a', delta: 2);
+        ymd: '2026-01-01', trackerId: 't1', itemKey: 'a', delta: 2,);
     await repo.applyDelta(
-        ymd: '2026-01-02', trackerId: 't1', itemKey: 'a', delta: 3);
+        ymd: '2026-01-02', trackerId: 't1', itemKey: 'a', delta: 3,);
     await repo.applyDelta(
-        ymd: '2026-01-02', trackerId: 't2', itemKey: 'b', delta: 4);
+        ymd: '2026-01-02', trackerId: 't2', itemKey: 'b', delta: 4,);
 
     final day = await repo.listForDate(ymd: '2026-01-02');
     expect(day.length, 2);

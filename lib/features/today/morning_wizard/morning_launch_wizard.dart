@@ -377,7 +377,7 @@ class _StepYesterday extends StatelessWidget {
                 Row(
                   children: [
                     Icon(Icons.wb_sunny_outlined,
-                        color: scheme.primary, size: 28),
+                        color: scheme.primary, size: 28,),
                     Gap.w12,
                     Expanded(
                       child: Text(

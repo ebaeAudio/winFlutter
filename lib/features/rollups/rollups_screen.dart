@@ -46,7 +46,7 @@ class _RollupsScreenState extends ConsumerState<RollupsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Couldn’t load rollups',
-                      style: Theme.of(context).textTheme.titleMedium),
+                      style: Theme.of(context).textTheme.titleMedium,),
                   Gap.h8,
                   Text('$e', style: Theme.of(context).textTheme.bodySmall),
                 ],
@@ -67,7 +67,7 @@ class _RollupsBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasAnyActivity = data.breakdown.any((d) =>
-        d.mustWinTotal > 0 || d.niceToDoTotal > 0 || d.habitsTotal > 0);
+        d.mustWinTotal > 0 || d.niceToDoTotal > 0 || d.habitsTotal > 0,);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

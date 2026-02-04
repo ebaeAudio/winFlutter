@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/today/today_models.dart';
 import 'all_tasks_models.dart';
 import 'all_tasks_repository.dart';
+import '../paginated_result.dart';
 import 'task.dart' as data;
 
 class LocalAllTasksRepository implements AllTasksRepository {
@@ -13,7 +16,10 @@ class LocalAllTasksRepository implements AllTasksRepository {
   static const _dayPrefix = 'today_day_';
 
   @override
-  Future<List<AllTask>> listAll() async {
+  Future<PaginatedResult<AllTask>> listAll({
+    int limit = 50,
+    String? cursor,
+  }) async {
     final keys = _prefs.getKeys();
     final tasks = <AllTask>[];
 
@@ -50,7 +56,35 @@ class LocalAllTasksRepository implements AllTasksRepository {
       return a.createdAtMs.compareTo(b.createdAtMs);
     });
 
-    return tasks;
+    final offset = _decodeCursor(cursor);
+    final safeLimit = limit < 1 ? 1 : limit;
+
+    if (offset >= tasks.length) {
+      return const PaginatedResult(items: [], hasMore: false, nextCursor: null);
+    }
+
+    final endExclusive = (offset + safeLimit) > tasks.length
+        ? tasks.length
+        : (offset + safeLimit);
+    final page = tasks.sublist(offset, endExclusive);
+    final hasMore = endExclusive < tasks.length;
+    final nextCursor = hasMore ? _encodeCursor(endExclusive) : null;
+    return PaginatedResult(items: page, hasMore: hasMore, nextCursor: nextCursor);
+  }
+
+  static int _decodeCursor(String? cursor) {
+    final raw = (cursor ?? '').trim();
+    if (raw.isEmpty) return 0;
+    try {
+      final decoded = utf8.decode(base64Url.decode(raw));
+      return int.tryParse(decoded) ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  static String _encodeCursor(int offset) {
+    return base64Url.encode(utf8.encode(offset.toString()));
   }
 
   @override

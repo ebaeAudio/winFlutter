@@ -128,7 +128,7 @@ AssistantTranslation heuristicTranslate({
     final name = _stripPrefix(actionRaw, ['complete habit ', 'mark habit ']);
     if (name.isNotEmpty) {
       commands.add(
-          HabitSetCompletedCommand(name: _clamp(name, 140), completed: true));
+          HabitSetCompletedCommand(name: _clamp(name, 140), completed: true),);
     }
   } else if (actionLower.startsWith('uncomplete habit ') ||
       actionLower.startsWith('unmark habit ') ||
@@ -139,7 +139,7 @@ AssistantTranslation heuristicTranslate({
     );
     if (name.isNotEmpty) {
       commands.add(
-          HabitSetCompletedCommand(name: _clamp(name, 140), completed: false));
+          HabitSetCompletedCommand(name: _clamp(name, 140), completed: false),);
     }
   }
 
@@ -153,7 +153,7 @@ AssistantTranslation heuristicTranslate({
       commands.add(TaskCreateCommand(
         title: _clamp(title, 140),
         taskType: _inferTaskType(actionRaw),
-      ));
+      ),);
     }
   } else if (actionLower.startsWith('add must win ') ||
       actionLower.startsWith('add must win task') ||
@@ -164,7 +164,7 @@ AssistantTranslation heuristicTranslate({
     ).replaceFirst(RegExp(r'^:\s*'), '');
     if (title.isNotEmpty) {
       commands.add(TaskCreateCommand(
-          title: _clamp(title, 140), taskType: AssistantTaskType.mustWin));
+          title: _clamp(title, 140), taskType: AssistantTaskType.mustWin,),);
     }
   } else if (actionLower.startsWith('add nice to do ') ||
       actionLower.startsWith('add nice to do task') ||
@@ -172,11 +172,11 @@ AssistantTranslation heuristicTranslate({
     final title = _stripPrefix(actionRaw, [
       'add nice to do ',
       'add nice to do task',
-      'add nice-to-do task'
+      'add nice-to-do task',
     ]).replaceFirst(RegExp(r'^:\s*'), '');
     if (title.isNotEmpty) {
       commands.add(TaskCreateCommand(
-          title: _clamp(title, 140), taskType: AssistantTaskType.niceToDo));
+          title: _clamp(title, 140), taskType: AssistantTaskType.niceToDo,),);
     }
   }
 
@@ -185,16 +185,16 @@ AssistantTranslation heuristicTranslate({
     final title = _stripPrefix(actionRaw, ['complete task ', 'mark task ']);
     if (title.isNotEmpty) {
       commands.add(
-          TaskSetCompletedCommand(title: _clamp(title, 140), completed: true));
+          TaskSetCompletedCommand(title: _clamp(title, 140), completed: true),);
     }
   } else if (actionLower.startsWith('uncomplete task ') ||
       actionLower.startsWith('unmark task ') ||
       actionLower.startsWith('undo task ')) {
     final title = _stripPrefix(
-        actionRaw, ['uncomplete task ', 'unmark task ', 'undo task ']);
+        actionRaw, ['uncomplete task ', 'unmark task ', 'undo task '],);
     if (title.isNotEmpty) {
       commands.add(
-          TaskSetCompletedCommand(title: _clamp(title, 140), completed: false));
+          TaskSetCompletedCommand(title: _clamp(title, 140), completed: false),);
     }
   }
 

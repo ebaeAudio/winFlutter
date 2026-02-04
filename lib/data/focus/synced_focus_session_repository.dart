@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -83,10 +84,12 @@ class SyncedFocusSessionRepository implements FocusSessionRepository {
     await _local.saveActiveSession(session);
 
     // Then sync to Supabase (best-effort, non-blocking for UX).
-    // We don't await this to avoid slowing down the start flow.
-    _remote.saveActiveSession(
-      session,
-      sourcePlatform: _currentPlatform,
+    // Explicitly unawaited to avoid slowing down the start flow.
+    unawaited(
+      _remote.saveActiveSession(
+        session,
+        sourcePlatform: _currentPlatform,
+      ),
     );
   }
 

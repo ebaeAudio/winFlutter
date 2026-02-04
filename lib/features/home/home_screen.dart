@@ -31,7 +31,7 @@ class HomeScreen extends ConsumerWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(auth?.email ??
-                        (auth?.isDemo == true ? 'demo@local' : '—')),
+                        (auth?.isDemo == true ? 'demo@local' : '—'),),
                     const SizedBox(height: 6),
                     Text(
                       supabase.isInitialized

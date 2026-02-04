@@ -46,6 +46,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     return 'winflutter://auth-callback';
   }
 
+  String? _magicLinkRedirectTo() {
+    // On web, Supabase handles the redirect automatically via the site URL.
+    if (kIsWeb) return null;
+    // Mobile deep link scheme (also needs to be added to Supabase Redirect URLs).
+    return 'winflutter://auth-callback';
+  }
+
   @override
   void dispose() {
     _email.dispose();
@@ -128,7 +135,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           setState(() => _info = 'Check your email to confirm your account.');
           break;
         case _AuthMode.magicLink:
-          await client.auth.signInWithOtp(email: email);
+          await client.auth.signInWithOtp(
+            email: email,
+            emailRedirectTo: _magicLinkRedirectTo(),
+          );
           TextInput.finishAutofillContext(shouldSave: false);
           setState(() => _info = 'Check your email for the magic link.');
           break;
@@ -177,7 +187,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             ButtonSegment(value: _AuthMode.signIn, label: Text('Sign in')),
             ButtonSegment(value: _AuthMode.signUp, label: Text('Sign up')),
             ButtonSegment(
-                value: _AuthMode.magicLink, label: Text('Magic link')),
+                value: _AuthMode.magicLink, label: Text('Magic link'),),
           ],
           selected: {_mode},
           onSelectionChanged: (s) => setState(() {
@@ -323,12 +333,12 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           InfoBanner(
               title: 'Couldn’t sign you in',
               tone: InfoBannerTone.error,
-              message: _error),
+              message: _error,),
         ],
         if (_info != null) ...[
           Gap.h12,
           InfoBanner(
-              title: 'Done', tone: InfoBannerTone.neutral, message: _info),
+              title: 'Done', tone: InfoBannerTone.neutral, message: _info,),
         ],
         Gap.h12,
         FilledButton(

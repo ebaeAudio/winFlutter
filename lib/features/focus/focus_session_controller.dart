@@ -123,7 +123,8 @@ class ActiveFocusSessionController extends AsyncNotifier<FocusSession?> {
     }
 
     // Cancel the "session complete" notification if they ended early.
-    ref.read(notificationServiceProvider).cancel(
+    // ignore: unawaited_futures
+    await ref.read(notificationServiceProvider).cancel(
           notificationIdForFocusSession(active.id),
         );
 

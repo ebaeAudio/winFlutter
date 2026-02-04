@@ -66,7 +66,7 @@ class FocusPolicy {
       name: (json['name'] as String?) ?? 'Focus',
       allowedApps: appsRaw is List
           ? appsRaw
-              .whereType<Map>()
+              .whereType<Map<dynamic, dynamic>>()
               .map((m) => AppIdentifier.fromJson(m.cast<String, Object?>()))
               .toList(growable: false)
           : const [],
@@ -87,7 +87,7 @@ class FocusPolicy {
     final decoded = jsonDecode(raw);
     if (decoded is! List) return const [];
     return decoded
-        .whereType<Map>()
+        .whereType<Map<dynamic, dynamic>>()
         .map((m) => FocusPolicy.fromJson(m.cast<String, Object?>()))
         .toList(growable: false);
   }

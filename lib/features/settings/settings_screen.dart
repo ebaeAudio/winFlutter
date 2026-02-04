@@ -122,7 +122,7 @@ class SettingsScreen extends ConsumerWidget {
           contentPadding: EdgeInsets.zero,
           title: const Text('Email'),
           subtitle: Text(auth?.email ??
-              (auth?.isDemo == true ? 'demo@local' : '—')),
+              (auth?.isDemo == true ? 'demo@local' : '—'),),
         ),
         if (auth?.isDemo != true && client != null) ...[
           const Divider(),

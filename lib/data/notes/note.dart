@@ -71,13 +71,13 @@ class ProjectData {
       nextActions: rawNextActions is List
           ? [
               for (final item in rawNextActions)
-                if (item is String) item
+                if (item is String) item,
             ]
           : [],
       resources: rawResources is List
           ? [
               for (final item in rawResources)
-                if (item is String) item
+                if (item is String) item,
             ]
           : [],
     );

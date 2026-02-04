@@ -1,7 +1,11 @@
 import 'all_tasks_models.dart';
+import '../paginated_result.dart';
 
 abstract interface class AllTasksRepository {
-  Future<List<AllTask>> listAll();
+  Future<PaginatedResult<AllTask>> listAll({
+    int limit = 50,
+    String? cursor,
+  });
 
   Future<void> setCompleted({
     required String ymd,

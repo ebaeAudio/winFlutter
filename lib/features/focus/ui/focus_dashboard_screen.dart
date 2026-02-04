@@ -468,10 +468,11 @@ class _ActiveSessionCardState extends ConsumerState<_ActiveSessionCard> {
                 // (Android also enforces this delay on the native blocking screen.)
                 if (effectiveFriction.unlockDelaySeconds > 0) {
                   if (!context.mounted) return;
-                  await ShameDelaySheet.show(
+                  final completed = await ShameDelaySheet.show(
                     context,
                     delaySeconds: effectiveFriction.unlockDelaySeconds,
                   );
+                  if (!completed) return;
                 }
 
                 Future<bool> ensureSelfieValidated(BuildContext ctx) async {
@@ -832,17 +833,6 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
     required int requiredUnlockTaskCount,
     required bool requireSelfieToEndEarly,
   }) async {
-    final isIOS = !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
-    final isAndroid =
-        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-    final allowedCount = policy.allowedApps.length;
-
-    final platformWhatHappens = isAndroid
-        ? 'Android will show a blocking screen when you open any app that is not on your Allowed apps list.'
-        : isIOS
-            ? 'iOS will use Screen Time to shield the apps you selected in the iOS app picker (Policy → “Choose apps to block”).'
-            : 'This platform may not support app blocking.';
-
     final ok = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -853,56 +843,41 @@ class _StartSessionCardState extends ConsumerState<_StartSessionCard> {
                 children: [
                   Text('Policy: ${policy.name}'),
                   Text(
-                      'Ends at: ${DateFormat.Hm().format(endsAt)} (${duration.inMinutes} min)'),
-                  const SizedBox(height: 12),
+                      'Duration: ${duration.inMinutes} min (ends at ${DateFormat.Hm().format(endsAt)})',),
+                  const SizedBox(height: 16),
                   Text(
-                    'What will happen',
-                    style: Theme.of(ctx).textTheme.titleSmall,
+                    'The apps you selected to block will be restricted until your session ends.',
+                    style: Theme.of(ctx).textTheme.bodyMedium,
                   ),
-                  const SizedBox(height: 6),
-                  Text(platformWhatHappens),
-                  const SizedBox(height: 8),
-                  Text('Allowed apps: $allowedCount'),
-                  if (allowedCount == 0) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'Warning: with 0 allowed apps, almost everything will be blocked (except this app, so you can still end the session).',
-                      style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(ctx).colorScheme.error,
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                   Text(
-                    'How to turn it off',
+                    'To end early',
                     style: Theme.of(ctx).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 6),
                   Text(
-                      'It will end automatically at ${DateFormat.Hm().format(endsAt)}.'),
-                  const SizedBox(height: 6),
-                  Text(
-                    'To end early: open Dumb Phone Mode → “Hold to end session early” (${friction.holdToUnlockSeconds}s hold, then ${friction.unlockDelaySeconds}s delay).',
+                    'Hold to end session early (${friction.holdToUnlockSeconds}s hold, then ${friction.unlockDelaySeconds}s delay).',
                   ),
                   if (requiredUnlockTaskCount > 0) ...[
                     const SizedBox(height: 6),
                     Text(
-                      'Because “Complete tasks to unlock” is enabled, you must complete $requiredUnlockTaskCount selected tasks before the early-exit hold will work.',
+                      'You must complete $requiredUnlockTaskCount selected task${requiredUnlockTaskCount > 1 ? "s" : ""} first.',
                     ),
                   ],
                   if (requireSelfieToEndEarly) ...[
                     const SizedBox(height: 6),
                     const Text(
-                      'Because “Require clown camera check to end early” is enabled, you’ll also need to open the selfie camera with the overlay (a photo is saved on your device).',
+                      'A selfie check is required to end early.',
                     ),
                   ],
-                  if (isAndroid) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'Android tip: the blocking screen also has “Hold ${friction.holdToUnlockSeconds}s” to end the session, plus an “Emergency end (${friction.emergencyUnlockMinutes} min)” button.',
-                    ),
-                  ],
+                  const SizedBox(height: 20),
+                  Text(
+                    'Good luck - you have got this!',
+                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(ctx).colorScheme.primary,
+                        ),
+                  ),
                 ],
               ),
             ),

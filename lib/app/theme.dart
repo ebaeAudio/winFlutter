@@ -162,10 +162,10 @@ ThemeData themeFor(AppThemeMode mode, Brightness brightness) {
       errorStyle: TextStyle(color: scheme.error),
       border: OutlineInputBorder(
           borderRadius: radiusMedium,
-          borderSide: BorderSide(color: scheme.outlineVariant)),
+          borderSide: BorderSide(color: scheme.outlineVariant),),
       enabledBorder: OutlineInputBorder(
           borderRadius: radiusMedium,
-          borderSide: BorderSide(color: scheme.outlineVariant)),
+          borderSide: BorderSide(color: scheme.outlineVariant),),
       focusedBorder: OutlineInputBorder(
         borderRadius: radiusMedium,
         borderSide: BorderSide(color: scheme.primary, width: 2),
@@ -200,7 +200,7 @@ ThemeData themeFor(AppThemeMode mode, Brightness brightness) {
       style: ButtonStyle(
         visualDensity: VisualDensity.standard,
         shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(borderRadius: radiusSmall)),
+            RoundedRectangleBorder(borderRadius: radiusSmall),),
       ),
     ),
     snackBarTheme: SnackBarThemeData(

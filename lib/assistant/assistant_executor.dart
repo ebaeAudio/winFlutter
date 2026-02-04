@@ -126,7 +126,7 @@ class AssistantExecutor {
             await controller.setTaskCompleted(taskId, cmd.completed);
             executed++;
             messages.add(
-                '${cmd.completed ? "Completed" : "Uncompleted"}: ${cmd.title}');
+                '${cmd.completed ? "Completed" : "Uncompleted"}: ${cmd.title}',);
             break;
 
           case TaskDeleteCommand():
@@ -167,7 +167,7 @@ class AssistantExecutor {
             );
             executed++;
             messages.add(
-                '${cmd.completed ? "Completed" : "Uncompleted"} habit: ${cmd.name}');
+                '${cmd.completed ? "Completed" : "Uncompleted"} habit: ${cmd.name}',);
             break;
 
           case ReflectionAppendCommand():

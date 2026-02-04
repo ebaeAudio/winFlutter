@@ -147,7 +147,7 @@ query IssueByIdentifier($id: String!) {
 
     // Parse team states
     final statesRaw = (teamMap['states'] as Map?)?['nodes'];
-    final statesList = statesRaw is List ? statesRaw : const [];
+    final statesList = statesRaw is List ? statesRaw : const <Object?>[];
     final teamStates = <LinearIssueState>[];
     for (final s in statesList) {
       if (s is! Map) continue;

@@ -1,4 +1,4 @@
-import 'task.dart';
+import '../../domain/tasks/task.dart';
 
 /// A lightweight, cross-mode task shape for the “All Tasks” overview screen.
 class AllTask {

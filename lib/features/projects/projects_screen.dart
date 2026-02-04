@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -256,7 +258,7 @@ class _ProjectsScreenState extends State<ProjectsScreen>
                       child: Row(
                         children: [
                           Icon(Icons.info_outline,
-                              size: 20, color: theme.colorScheme.primary),
+                              size: 20, color: theme.colorScheme.primary,),
                           Gap.w12,
                           Expanded(
                             child: Text(
@@ -477,7 +479,7 @@ class _SecretNotesEntryCardState extends State<_SecretNotesEntryCard>
             onLongPress: () async {
               await HapticFeedback.mediumImpact();
               if (!context.mounted) return;
-              context.push('/settings/projects/secret-notes');
+              unawaited(context.push('/settings/projects/secret-notes'));
             },
             onTapDown: (_) => setState(() => _isPressed = true),
             onTapUp: (_) => setState(() => _isPressed = false),

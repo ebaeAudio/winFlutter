@@ -59,6 +59,8 @@
 	<string>Win The Year uses the microphone so you can speak tasks, habits, and reflections hands-free.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Win The Year saves "clown check" photos to your Photo Library when you end Dumb Phone Mode early.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Win The Year may access your Photo Library to attach images to tasks or notes.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Win The Year uses speech recognition to turn what you say into tasks, habits, and reflections.</string>
 	<key>UIApplicationSceneManifest</key>

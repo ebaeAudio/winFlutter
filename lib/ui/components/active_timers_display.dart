@@ -61,7 +61,7 @@ class ActiveTimersDisplay extends ConsumerWidget {
         color: pomodoroTimer.phase == PomodoroPhase.focus
             ? scheme.primary
             : scheme.secondary,
-      ));
+      ),);
     }
 
     // Focus session (local or remote from another device)
@@ -76,7 +76,7 @@ class ActiveTimersDisplay extends ConsumerWidget {
           icon: combinedSession.isRemote ? Icons.phone_iphone : Icons.lock,
           color: scheme.primary,
           isRemote: combinedSession.isRemote,
-        ));
+        ),);
       }
     }
 
@@ -98,7 +98,7 @@ class ActiveTimersDisplay extends ConsumerWidget {
           color: todayTimer.kind == TodayTimerKind.focus
               ? scheme.primary
               : scheme.secondary,
-        ));
+        ),);
       }
     }
 
@@ -130,7 +130,7 @@ class ActiveTimersDisplay extends ConsumerWidget {
           ...activeTimers.map((timer) => _TimerItem(
                 timer: timer,
                 isExpanded: isExpanded,
-              )),
+              ),),
         ],
       ),
     );

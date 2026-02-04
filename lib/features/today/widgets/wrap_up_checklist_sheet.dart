@@ -238,7 +238,7 @@ class _WrapUpChecklistSheetState
   }
 
   Future<void> _saveNote(BuildContext context,
-      {required bool showSnack}) async {
+      {required bool showSnack,}) async {
     final raw = _noteController.text.trim();
     if (raw.isEmpty) return;
 

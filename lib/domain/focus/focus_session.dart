@@ -97,7 +97,7 @@ class FocusSession {
     final decoded = jsonDecode(raw);
     if (decoded is! List) return const [];
     return decoded
-        .whereType<Map>()
+        .whereType<Map<dynamic, dynamic>>()
         .map((m) => FocusSession.fromJson(m.cast<String, Object?>()))
         .toList(growable: false);
   }

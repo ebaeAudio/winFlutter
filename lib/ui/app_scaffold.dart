@@ -90,7 +90,7 @@ class AppScaffold extends ConsumerWidget {
                 ? LayoutBuilder(
                     builder: (context, constraints) {
                       final maxGutter = math.max(0.0,
-                          constraints.maxWidth - baseHorizontalPadding * 2);
+                          constraints.maxWidth - baseHorizontalPadding * 2,);
                       final gutterWidth = math.min(preferredGutter, maxGutter);
                       final opposingSideIsRight = hand == OneHandModeHand.left;
 
